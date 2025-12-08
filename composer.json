@@ -1,0 +1,66 @@
+{
+  "name": "utopia-php/async",
+  "version": "1.0.0",
+  "description": "High-performance concurrent + parallel library with Promise and Parallel execution support for PHP.",
+  "type": "library",
+  "license": "BSD-3-Clause",
+  "authors": [
+    {
+      "name": "Appwrite Team",
+      "email": "team@appwrite.io"
+    }
+  ],
+  "require": {
+    "php": ">=8.1",
+    "ext-sockets": "*",
+    "opis/closure": "4.*"
+  },
+  "require-dev": {
+    "amphp/amp": "^3.0",
+    "amphp/parallel": "^2.0",
+    "laravel/pint": "1.*",
+    "phpstan/phpstan": "1.*",
+    "phpunit/phpunit": "11.*",
+    "react/child-process": "^0.6",
+    "react/event-loop": "^1.5",
+    "swoole/ide-helper": "*"
+  },
+  "suggest": {
+    "ext-swoole": "Required for Swoole Thread and Process adapters (recommended for best performance)",
+    "ext-parallel": "Required for parallel adapter (requires PHP ZTS build)",
+    "amphp/amp": "Required for Amp promise adapter",
+    "amphp/parallel": "Required for Amp parallel adapter",
+    "react/event-loop": "Required for ReactPHP promise and parallel adapters",
+    "react/child-process": "Required for ReactPHP parallel adapter"
+  },
+  "autoload": {
+    "psr-4": {
+      "Utopia\\Async\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Utopia\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "phpunit",
+    "lint": "pint",
+    "format": "php -d memory_limit=4G ./vendor/bin/pint",
+    "check": "./vendor/bin/phpstan analyse --level max --memory-limit 4G",
+    "analyse": "phpstan analyse"
+  },
+  "config": {
+    "platform": {
+      "php": "8.4"
+    },
+    "optimize-autoloader": true,
+    "sort-packages": true,
+    "allow-plugins": {
+      "php-http/discovery": true,
+      "tbachert/spi": true
+    }
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}

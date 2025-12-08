@@ -1,0 +1,24 @@
+services:
+  tests:
+    container_name: async-tests
+    image: async-dev
+    build:
+      context: .
+      args:
+        DEBUG: true
+    networks:
+      - async
+    volumes:
+      - ./src:/usr/src/code/src
+      - ./tests:/usr/src/code/tests
+      - ./benchmarks:/usr/src/code/benchmarks
+      - ./phpunit.xml:/usr/src/code/phpunit.xml
+      - ./phpstan.neon:/usr/src/code/phpstan.neon
+      - ./pint.json:/usr/src/code/pint.json
+      - ./composer.json:/usr/src/code/composer.json
+      - ./composer.lock:/usr/src/code/composer.lock
+    environment:
+      PHP_IDE_CONFIG: serverName=async-tests
+
+networks:
+  async:
