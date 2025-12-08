@@ -62,4 +62,13 @@ class Sync extends Adapter
         }
         return $results;
     }
+
+    /**
+     * Shutdown - no resources to clean up for sync adapter.
+     *
+     * @return void
+     */
+    public static function shutdown(): void
+    {
+    }
 }

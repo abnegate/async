@@ -4,6 +4,7 @@ namespace Utopia\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Async\Promise\Adapter;
+use Utopia\Async\Promise\Configuration;
 
 /**
  * Test class that extends Adapter to access protected methods
@@ -195,19 +196,28 @@ class PromiseAdapterTest extends TestCase
         $this->assertEquals(-1, $constants['STATE_REJECTED']);
     }
 
-    public function testSleepDurationConstants(): void
+    public function testSleepDurationConfiguration(): void
     {
-        $reflection = new \ReflectionClass(Adapter::class);
+        // Test default values via Configuration class
+        $this->assertEquals(100, Configuration::getSleepDurationUs());
+        $this->assertEquals(10000, Configuration::getMaxSleepDurationUs());
+        $this->assertEquals(0.001, Configuration::getCoroutineSleepDurationS());
 
-        $constants = $reflection->getConstants();
+        // Test setting custom values
+        Configuration::setSleepDurationUs(200);
+        Configuration::setMaxSleepDurationUs(20000);
+        Configuration::setCoroutineSleepDurationS(0.002);
 
-        $this->assertArrayHasKey('SLEEP_DURATION_US', $constants);
-        $this->assertArrayHasKey('MAX_SLEEP_DURATION_US', $constants);
-        $this->assertArrayHasKey('COROUTINE_SLEEP_DURATION_S', $constants);
+        $this->assertEquals(200, Configuration::getSleepDurationUs());
+        $this->assertEquals(20000, Configuration::getMaxSleepDurationUs());
+        $this->assertEquals(0.002, Configuration::getCoroutineSleepDurationS());
 
-        $this->assertEquals(100, $constants['SLEEP_DURATION_US']);
-        $this->assertEquals(10000, $constants['MAX_SLEEP_DURATION_US']);
-        $this->assertEquals(0.001, $constants['COROUTINE_SLEEP_DURATION_S']);
+        // Reset to defaults
+        Configuration::reset();
+
+        $this->assertEquals(100, Configuration::getSleepDurationUs());
+        $this->assertEquals(10000, Configuration::getMaxSleepDurationUs());
+        $this->assertEquals(0.001, Configuration::getCoroutineSleepDurationS());
     }
 
     public function testConstructorWithNullExecutor(): void

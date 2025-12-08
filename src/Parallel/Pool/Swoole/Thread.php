@@ -9,7 +9,7 @@ use Swoole\Thread\Barrier;
 use Swoole\Thread\Map;
 use Swoole\Thread\Queue;
 use Utopia\Async\GarbageCollection;
-use Utopia\Async\Parallel\Constants;
+use Utopia\Async\Parallel\Configuration;
 
 /**
  * Persistent Thread Pool for efficient task execution.
@@ -199,7 +199,7 @@ class Thread
 
             // Use proper time-based timeout (30 seconds default)
             $startTime = \microtime(true);
-            $timeoutSeconds = Constants::MAX_TASK_TIMEOUT_SECONDS;
+            $timeoutSeconds = Configuration::getMaxTaskTimeoutSeconds();
             $deadline = $startTime + $timeoutSeconds;
 
             while (!empty($pendingIndices)) {
@@ -321,7 +321,7 @@ class Thread
             unset($this->resultMap[$key]);
             unset($pendingIndices[$iterIndex]);
 
-            if (++$this->gcCheckCounter >= Constants::GC_CHECK_INTERVAL) {
+            if (++$this->gcCheckCounter >= Configuration::getGcCheckInterval()) {
                 $this->gcCheckCounter = 0;
                 $this->triggerGC();
             }

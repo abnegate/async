@@ -159,12 +159,22 @@ $pool = Parallel::createPool(16); // 16 workers
 
 ## Adapters
 
-The library automatically selects the best adapter:
+The library automatically selects the best adapter based on available extensions.
 
-| Component | With Swoole     | Without Swoole  |
-|-----------|-----------------|-----------------|
-| Promise   | Coroutine       | Sync (blocking) |
-| Parallel  | Thread, Process | Sync (blocking) |
+### Adapter Matrix
+
+| Adapter              | Component | Runtime        | Requirements                                              |
+|----------------------|-----------|----------------|-----------------------------------------------------------|
+| **Swoole\Coroutine** | Promise   | Async          | `ext-swoole`                                              |
+| **Amp**              | Promise   | Async          | `amphp/amp`, `revolt/event-loop`                          |
+| **React**            | Promise   | Async          | `react/event-loop`                                        |
+| **Sync**             | Promise   | Blocking       | None (fallback)                                           |
+| **Swoole\Thread**    | Parallel  | Multi-threaded | `ext-swoole` >=6.0 with threads, PHP ZTS                  |
+| **Swoole\Process**   | Parallel  | Multi-process  | `ext-swoole`                                              |
+| **Parallel**         | Parallel  | Multi-threaded | `ext-parallel`, PHP ZTS                                   |
+| **Amp**              | Parallel  | Multi-process  | `amphp/parallel`                                          |
+| **React**            | Parallel  | Multi-process  | `react/child-process`, `react/event-loop`, `opis/closure` |
+| **Sync**             | Parallel  | Sequential     | None (fallback)                                           |
 
 ### Manual Adapter Selection
 
@@ -192,16 +202,65 @@ try {
 }
 ```
 
-## Configuration Constants
+## Configuration
 
-Located in `Parallel\Constants`:
+Both `Parallel` and `Promise` facades expose configurable options via static getter/setter methods.
 
-| Constant                      | Default | Description             |
-|-------------------------------|---------|-------------------------|
-| `MAX_SERIALIZED_SIZE`         | 10 MB   | Maximum payload size    |
-| `MAX_TASK_TIMEOUT_SECONDS`    | 30s     | Task execution timeout  |
-| `DEADLOCK_DETECTION_INTERVAL` | 5s      | Progress check interval |
-| `MEMORY_THRESHOLD_FOR_GC`     | 50 MB   | GC trigger threshold    |
+### Parallel Configuration
+
+```php
+use Utopia\Async\Parallel;
+
+// Get current values
+Parallel::getMaxSerializedSize();         // 10 MB (10485760 bytes)
+Parallel::getMaxTaskTimeoutSeconds();     // 30 seconds
+Parallel::getDeadlockDetectionInterval(); // 5 seconds
+Parallel::getMemoryThresholdForGc();      // 50 MB (52428800 bytes)
+Parallel::getStreamSelectTimeoutUs();     // 100ms (100000 μs)
+Parallel::getWorkerSleepDurationUs();     // 10ms (10000 μs)
+Parallel::getGcCheckInterval();           // 10 tasks
+
+// Set custom values
+Parallel::setMaxTaskTimeoutSeconds(60);  // Increase timeout to 60s
+Parallel::setMemoryThresholdForGc(104857600); // 100 MB
+
+// Reset all to defaults
+Parallel::resetConfig();
+```
+
+| Option                      | Default | Description                               |
+|-----------------------------|---------|-------------------------------------------|
+| `MaxSerializedSize`         | 10 MB   | Maximum payload size for task data        |
+| `MaxTaskTimeoutSeconds`     | 30s     | Task execution timeout                    |
+| `DeadlockDetectionInterval` | 5s      | Progress check interval for stuck workers |
+| `MemoryThresholdForGc`      | 50 MB   | GC trigger threshold                      |
+| `StreamSelectTimeoutUs`     | 100ms   | Non-blocking I/O timeout                  |
+| `WorkerSleepDurationUs`     | 10ms    | Worker idle sleep duration                |
+| `GcCheckInterval`           | 10      | Tasks between GC checks                   |
+
+### Promise Configuration
+
+```php
+use Utopia\Async\Promise;
+
+// Get current values
+Promise::getSleepDurationUs();           // 100 μs
+Promise::getMaxSleepDurationUs();        // 10ms (10000 μs)
+Promise::getCoroutineSleepDurationS();   // 1ms (0.001 seconds)
+
+// Set custom values
+Promise::setSleepDurationUs(200);        // Increase initial sleep
+Promise::setMaxSleepDurationUs(50000);   // 50ms max backoff
+
+// Reset all to defaults
+Promise::resetConfig();
+```
+
+| Option                    | Default | Description                           |
+|---------------------------|---------|---------------------------------------|
+| `SleepDurationUs`         | 100μs   | Initial sleep for exponential backoff |
+| `MaxSleepDurationUs`      | 10ms    | Maximum sleep duration (backoff cap)  |
+| `CoroutineSleepDurationS` | 1ms     | Coroutine context sleep duration      |
 
 ## Parallel Adapters
 
@@ -228,35 +287,21 @@ Parallel::setAdapter(Process::class);
 
 The library achieves significant speedups for CPU-intensive and I/O-bound workloads through true parallel execution.
 
-### Benchmark Results (8 CPU cores, Swoole 6.1, 5 iterations averaged)
-
-| Workload | Sync | Thread | Process | Best Speedup |
-|----------|------|--------|---------|--------------|
-| Prime calculation (8 tasks) | 0.099s | 0.021s | 0.036s | **4.6x** (Thread) |
-| Matrix multiply (8 tasks) | 0.332s | 0.018s | 0.064s | **18.5x** (Thread) |
-| Sleep 50ms × 8 tasks | 0.420s | 0.081s | 0.068s | **6.1x** (Process) |
-| Mixed CPU/IO (8 tasks) | 0.243s | 0.077s | 0.066s | **3.7x** (Process) |
-
-### Adapter Comparison
-
-| Adapter | Best For | Avg Speedup | Characteristics |
-|---------|----------|-------------|-----------------|
-| **Thread** | CPU-bound tasks | 6.4x | Lower overhead, shared memory |
-| **Process** | I/O-bound tasks | 4.4x | Full isolation, better for blocking ops |
-
 ### Running Benchmarks
 
+Benchmarks automatically detect and test all available adapters in your environment:
+
 ```bash
-# Quick benchmark (fastest)
+# Quick benchmark - fast comparison of all available adapters
 php benchmarks/QuickBenchmark.php
 
-# Comprehensive benchmark
+# Comprehensive benchmark - detailed workload analysis
 php benchmarks/AdapterBenchmark.php
 
 # Quick mode (shorter tests)
 php benchmarks/AdapterBenchmark.php --quick
 
-# Scaling benchmark (task count analysis)
+# Scaling benchmark - task count analysis
 php benchmarks/ScalingBenchmark.php
 
 # Custom iteration count for stability
@@ -266,12 +311,23 @@ php benchmarks/QuickBenchmark.php --iterations=10
 php benchmarks/ScalingBenchmark.php --json
 ```
 
+### Adapter Comparison
+
+| Adapter            | Type           | Best For        | Characteristics                |
+|--------------------|----------------|-----------------|--------------------------------|
+| **Swoole Thread**  | Multi-threaded | CPU-bound tasks | Lowest overhead, shared memory |
+| **Swoole Process** | Multi-process  | I/O-bound tasks | Full isolation, blocking ops   |
+| **Amp**            | Multi-process  | Async I/O       | Event-loop based, fibers       |
+| **React**          | Multi-process  | Async I/O       | Event-loop based               |
+| **ext-parallel**   | Multi-threaded | CPU-bound tasks | Native PHP threads             |
+| **Sync**           | Sequential     | Fallback        | Always available               |
+
 ### Key Findings
 
-- **Thread adapter** excels at CPU-intensive tasks with up to 18x speedup
-- **Process adapter** performs better for I/O-bound and mixed workloads
+- **Thread-based adapters** (Swoole Thread, ext-parallel) excel at CPU-intensive tasks
+- **Process-based adapters** (Swoole Process, Amp, React) perform better for I/O-bound workloads
 - Speedup scales with task weight - heavier tasks benefit more from parallelism
-- Both adapters converge to similar performance at high task counts
+- Results vary by environment - run benchmarks to find the best adapter for your use case
 
 ## Development
 
@@ -288,4 +344,4 @@ composer format
 
 ## License
 
-BSD-3-Clause License. See [LICENSE](LICENSE) for details.
+MIT License. See [LICENSE](LICENSE) for details.

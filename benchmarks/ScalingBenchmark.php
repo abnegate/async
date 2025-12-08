@@ -13,8 +13,11 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use Utopia\Async\Parallel\Adapter\Swoole\Process;
-use Utopia\Async\Parallel\Adapter\Swoole\Thread;
+use Utopia\Async\Parallel\Adapter\Swoole\Process as SwooleProcess;
+use Utopia\Async\Parallel\Adapter\Swoole\Thread as SwooleThread;
+use Utopia\Async\Parallel\Adapter\Amp;
+use Utopia\Async\Parallel\Adapter\React;
+use Utopia\Async\Parallel\Adapter\Parallel;
 use Utopia\Async\Parallel\Adapter\Sync;
 
 // Parse command line arguments
@@ -28,15 +31,35 @@ foreach ($argv ?? [] as $arg) {
 
 $cpuCount = function_exists('swoole_cpu_num') ? swoole_cpu_num() : 4;
 
+// Define all adapters with their names and classes
+$allAdapters = [
+    'Sync' => Sync::class,
+    'Swoole Thread' => SwooleThread::class,
+    'Swoole Process' => SwooleProcess::class,
+    'Amp' => Amp::class,
+    'React' => React::class,
+    'ext-parallel' => Parallel::class,
+];
+
+// Filter to only supported adapters
+$adapters = [];
+foreach ($allAdapters as $name => $class) {
+    if ($class::isSupported()) {
+        $adapters[$name] = $class;
+    }
+}
+
 $taskCounts = [1, 2, 4, 8, 16, 32];
 
 $results = [
     'meta' => [
         'cpu_cores' => $cpuCount,
         'php_version' => PHP_VERSION,
-        'swoole_version' => SWOOLE_VERSION,
+        'swoole_version' => defined('SWOOLE_VERSION') ? SWOOLE_VERSION : null,
         'iterations' => $iterations,
         'timestamp' => date('Y-m-d H:i:s'),
+        'adapters_available' => array_keys($adapters),
+        'adapters_unavailable' => array_keys(array_diff_key($allAdapters, $adapters)),
     ],
     'data' => [],
 ];
@@ -80,122 +103,190 @@ function calculateStdDev(array $values): float
 
 if (!$jsonOutput) {
     echo "Scaling Benchmark ({$cpuCount} CPU cores, {$iterations} iterations)\n";
-    echo str_repeat('=', 85) . "\n\n";
-    printf("%-6s | %-18s | %-18s | %-18s | %-10s\n", 'Tasks', 'Sync', 'Thread', 'Process', 'Best');
-    echo str_repeat('-', 85) . "\n";
+    echo str_repeat('=', 100) . "\n\n";
+
+    echo "Detected adapters:\n";
+    foreach ($allAdapters as $name => $class) {
+        $supported = isset($adapters[$name]) ? '[x]' : '[ ]';
+        echo "  {$supported} {$name}\n";
+    }
+    echo "\n";
+
+    if (count($adapters) < 2) {
+        echo "ERROR: At least 2 adapters required for comparison.\n";
+        exit(1);
+    }
+
+    // Print header
+    $header = sprintf("%-6s | %-18s", 'Tasks', 'Sync');
+    foreach ($adapters as $name => $class) {
+        if ($name !== 'Sync') {
+            $shortName = str_replace(['Swoole ', 'ext-'], ['', ''], $name);
+            $header .= sprintf(" | %-18s", $shortName);
+        }
+    }
+    $header .= " | Best";
+    echo $header . "\n";
+    echo str_repeat('-', strlen($header) + 10) . "\n";
 }
 
 foreach ($taskCounts as $count) {
-    $syncTimes = [];
-    $threadTimes = [];
-    $processTimes = [];
+    $adapterTimes = [];
 
-    for ($iter = 0; $iter < $iterations; $iter++) {
-        // Create fresh tasks for each iteration
-        $tasks = [];
-        for ($i = 0; $i < $count; $i++) {
-            $tasks[] = $createTask();
-        }
-
-        // Sync
-        $start = microtime(true);
-        Sync::all($tasks);
-        $syncTimes[] = microtime(true) - $start;
-
-        // Thread (shutdown before to ensure clean state)
-        Thread::shutdown();
-        $tasks = [];
-        for ($i = 0; $i < $count; $i++) {
-            $tasks[] = $createTask();
-        }
-        $start = microtime(true);
-        Thread::all($tasks);
-        $threadTimes[] = microtime(true) - $start;
-        Thread::shutdown();
-
-        // Process
-        Process::shutdown();
-        $tasks = [];
-        for ($i = 0; $i < $count; $i++) {
-            $tasks[] = $createTask();
-        }
-        $start = microtime(true);
-        Process::all($tasks);
-        $processTimes[] = microtime(true) - $start;
-        Process::shutdown();
+    foreach ($adapters as $name => $class) {
+        $adapterTimes[$name] = [];
     }
 
-    $syncAvg = array_sum($syncTimes) / count($syncTimes);
-    $threadAvg = array_sum($threadTimes) / count($threadTimes);
-    $processAvg = array_sum($processTimes) / count($processTimes);
+    for ($iter = 0; $iter < $iterations; $iter++) {
+        foreach ($adapters as $name => $class) {
+            // Create fresh tasks for each iteration
+            $tasks = [];
+            for ($i = 0; $i < $count; $i++) {
+                $tasks[] = $createTask();
+            }
 
-    $syncStdDev = calculateStdDev($syncTimes);
-    $threadStdDev = calculateStdDev($threadTimes);
-    $processStdDev = calculateStdDev($processTimes);
+            // Shutdown before to ensure clean state
+            $class::shutdown();
 
-    $best = $threadAvg < $processAvg ? 'Thread' : 'Process';
-    $bestTime = min($threadAvg, $processAvg);
+            $start = microtime(true);
+            $class::all($tasks);
+            $adapterTimes[$name][] = microtime(true) - $start;
+
+            // Shutdown after
+            $class::shutdown();
+
+            // Force garbage collection to release file descriptors
+            gc_collect_cycles();
+        }
+
+        // Small delay between iterations to allow OS to reclaim file descriptors
+        usleep(10000); // 10ms
+    }
+
+    // Calculate stats for each adapter
+    $stats = [];
+    $syncAvg = null;
+
+    foreach ($adapters as $name => $class) {
+        $times = $adapterTimes[$name];
+        $avg = array_sum($times) / count($times);
+        $stdDev = calculateStdDev($times);
+
+        $stats[$name] = [
+            'avg' => $avg,
+            'stddev' => $stdDev,
+        ];
+
+        if ($name === 'Sync') {
+            $syncAvg = $avg;
+        }
+    }
+
+    // Find best adapter
+    $bestTime = PHP_FLOAT_MAX;
+    $best = 'Sync';
+    foreach ($stats as $name => $stat) {
+        if ($name !== 'Sync' && $stat['avg'] < $bestTime) {
+            $bestTime = $stat['avg'];
+            $best = $name;
+        }
+    }
     $speedup = $syncAvg / $bestTime;
 
-    $results['data'][] = [
+    // Store results for JSON output
+    $dataRow = [
         'tasks' => $count,
-        'sync' => round($syncAvg, 4),
-        'sync_stddev' => round($syncStdDev, 4),
-        'thread' => round($threadAvg, 4),
-        'thread_stddev' => round($threadStdDev, 4),
-        'process' => round($processAvg, 4),
-        'process_stddev' => round($processStdDev, 4),
-        'thread_speedup' => round($syncAvg / $threadAvg, 2),
-        'process_speedup' => round($syncAvg / $processAvg, 2),
         'best' => $best,
     ];
 
+    foreach ($adapters as $name => $class) {
+        $key = strtolower(str_replace([' ', '-'], '_', $name));
+        $dataRow[$key] = round($stats[$name]['avg'], 4);
+        $dataRow[$key . '_stddev'] = round($stats[$name]['stddev'], 4);
+        if ($name !== 'Sync') {
+            $dataRow[$key . '_speedup'] = round($syncAvg / $stats[$name]['avg'], 2);
+        }
+    }
+
+    $results['data'][] = $dataRow;
+
     if (!$jsonOutput) {
-        printf(
-            "%-6d | %6.3fs (+/-%.3f) | %6.3fs (+/-%.3f) | %6.3fs (+/-%.3f) | %s (%.1fx)\n",
+        $output = sprintf(
+            "%-6d | %6.3fs (+/-%.3f)",
             $count,
-            $syncAvg,
-            $syncStdDev,
-            $threadAvg,
-            $threadStdDev,
-            $processAvg,
-            $processStdDev,
-            $best,
-            $speedup
+            $stats['Sync']['avg'],
+            $stats['Sync']['stddev']
         );
+
+        foreach ($adapters as $name => $class) {
+            if ($name !== 'Sync') {
+                $adapterSpeedup = $syncAvg / $stats[$name]['avg'];
+                $output .= sprintf(
+                    " | %6.3fs (+/-%.3f)",
+                    $stats[$name]['avg'],
+                    $stats[$name]['stddev']
+                );
+            }
+        }
+
+        $shortBest = str_replace(['Swoole ', 'ext-'], ['', ''], $best);
+        $output .= sprintf(" | %s (%.1fx)", $shortBest, $speedup);
+
+        echo $output . "\n";
     }
 }
 
 if ($jsonOutput) {
     echo json_encode($results, JSON_PRETTY_PRINT) . "\n";
 } else {
-    echo str_repeat('-', 85) . "\n\n";
+    echo str_repeat('-', 100) . "\n\n";
 
     echo "Analysis:\n";
-    $threadWins = 0;
-    $processWins = 0;
-    foreach ($results['data'] as $row) {
-        if ($row['best'] === 'Thread') {
-            $threadWins++;
-        } else {
-            $processWins++;
+
+    // Count wins per adapter
+    $wins = [];
+    foreach ($adapters as $name => $class) {
+        if ($name !== 'Sync') {
+            $wins[$name] = 0;
         }
     }
-    echo "  Thread wins: {$threadWins}/" . count($results['data']) . "\n";
-    echo "  Process wins: {$processWins}/" . count($results['data']) . "\n\n";
 
+    foreach ($results['data'] as $row) {
+        if (isset($wins[$row['best']])) {
+            $wins[$row['best']]++;
+        }
+    }
+
+    foreach ($wins as $name => $count) {
+        $shortName = str_replace(['Swoole ', 'ext-'], ['', ''], $name);
+        echo "  {$shortName} wins: {$count}/" . count($results['data']) . "\n";
+    }
+    echo "\n";
+
+    // Find best speedup
     $maxSpeedup = 0;
     $optimalCount = 0;
+    $optimalAdapter = '';
+
     foreach ($results['data'] as $row) {
-        $speedup = max($row['thread_speedup'], $row['process_speedup']);
-        if ($speedup > $maxSpeedup) {
-            $maxSpeedup = $speedup;
-            $optimalCount = $row['tasks'];
+        foreach ($adapters as $name => $class) {
+            if ($name !== 'Sync') {
+                $key = strtolower(str_replace([' ', '-'], '_', $name)) . '_speedup';
+                if (isset($row[$key]) && $row[$key] > $maxSpeedup) {
+                    $maxSpeedup = $row[$key];
+                    $optimalCount = $row['tasks'];
+                    $optimalAdapter = $name;
+                }
+            }
         }
     }
-    echo "  Best speedup: {$maxSpeedup}x at {$optimalCount} tasks\n";
+
+    $shortOptimal = str_replace(['Swoole ', 'ext-'], ['', ''], $optimalAdapter);
+    echo "  Best speedup: {$maxSpeedup}x at {$optimalCount} tasks ({$shortOptimal})\n";
     echo "  Theoretical max: {$cpuCount}x (limited by CPU cores)\n";
 }
 
-Thread::shutdown();
-Process::shutdown();
+// Shutdown all adapters
+foreach ($adapters as $class) {
+    $class::shutdown();
+}

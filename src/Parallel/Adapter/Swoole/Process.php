@@ -8,7 +8,7 @@ use Utopia\Async\Exception;
 use Utopia\Async\Exception\Adapter as AdapterException;
 use Utopia\Async\Exception\Serialization as SerializationException;
 use Utopia\Async\Parallel\Adapter;
-use Utopia\Async\Parallel\Constants;
+use Utopia\Async\Parallel\Configuration;
 use Utopia\Async\Parallel\Pool\Swoole\Process as ProcessPool;
 
 /**
@@ -275,12 +275,12 @@ class Process extends Adapter
         while ($completed < $taskCount) {
             $currentTime = \time();
 
-            if ($currentTime - $lastProgressTime > Constants::DEADLOCK_DETECTION_INTERVAL) {
+            if ($currentTime - $lastProgressTime > Configuration::getDeadlockDetectionInterval()) {
                 if ($completed === $lastCompleted) {
                     throw new \RuntimeException(
                         \sprintf(
                             'Potential deadlock detected: no progress for %d seconds. Completed %d/%d tasks.',
-                            Constants::DEADLOCK_DETECTION_INTERVAL,
+                            Configuration::getDeadlockDetectionInterval(),
                             $completed,
                             $taskCount
                         )
@@ -290,11 +290,11 @@ class Process extends Adapter
                 $lastCompleted = $completed;
             }
 
-            if ($currentTime - $startTime > Constants::MAX_TASK_TIMEOUT_SECONDS) {
+            if ($currentTime - $startTime > Configuration::getMaxTaskTimeoutSeconds()) {
                 throw new \RuntimeException(
                     \sprintf(
                         'Task execution timeout: exceeded %d seconds. Completed %d/%d tasks.',
-                        Constants::MAX_TASK_TIMEOUT_SECONDS,
+                        Configuration::getMaxTaskTimeoutSeconds(),
                         $completed,
                         $taskCount
                     )
@@ -336,9 +336,9 @@ class Process extends Adapter
             if (!empty($activeWorkers)) {
                 // Use non-blocking sleep when in coroutine context
                 if (SwooleCoroutine::getCid() > 0) {
-                    SwooleCoroutine::sleep(Constants::WORKER_SLEEP_DURATION_US / 1000000);
+                    SwooleCoroutine::sleep(Configuration::getWorkerSleepDurationUs() / 1000000);
                 } else {
-                    \usleep(Constants::WORKER_SLEEP_DURATION_US);
+                    \usleep(Configuration::getWorkerSleepDurationUs());
                 }
             }
         }

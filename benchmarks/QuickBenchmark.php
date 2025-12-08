@@ -12,8 +12,11 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use Utopia\Async\Parallel\Adapter\Swoole\Process;
-use Utopia\Async\Parallel\Adapter\Swoole\Thread;
+use Utopia\Async\Parallel\Adapter\Swoole\Process as SwooleProcess;
+use Utopia\Async\Parallel\Adapter\Swoole\Thread as SwooleThread;
+use Utopia\Async\Parallel\Adapter\Amp;
+use Utopia\Async\Parallel\Adapter\React;
+use Utopia\Async\Parallel\Adapter\Parallel;
 use Utopia\Async\Parallel\Adapter\Sync;
 
 // Parse iterations from command line
@@ -27,7 +30,37 @@ foreach ($argv ?? [] as $arg) {
 $cpuCount = function_exists('swoole_cpu_num') ? swoole_cpu_num() : 4;
 
 echo "Quick Adapter Benchmark ({$cpuCount} CPU cores, {$iterations} iterations)\n";
-echo str_repeat('=', 60) . "\n\n";
+echo str_repeat('=', 70) . "\n\n";
+
+// Define all adapters with their names and classes
+$allAdapters = [
+    'Sync' => Sync::class,
+    'Swoole Thread' => SwooleThread::class,
+    'Swoole Process' => SwooleProcess::class,
+    'Amp' => Amp::class,
+    'React' => React::class,
+    'ext-parallel' => Parallel::class,
+];
+
+// Filter to only supported adapters
+$adapters = [];
+foreach ($allAdapters as $name => $class) {
+    if ($class::isSupported()) {
+        $adapters[$name] = $class;
+    }
+}
+
+echo "Detected adapters:\n";
+foreach ($allAdapters as $name => $class) {
+    $supported = $class::isSupported() ? '[x]' : '[ ]';
+    echo "  {$supported} {$name}\n";
+}
+echo "\n";
+
+if (count($adapters) < 2) {
+    echo "ERROR: At least 2 adapters required for comparison. Please install additional dependencies.\n";
+    exit(1);
+}
 
 // CPU-intensive task: calculate primes up to N
 $primeTarget = 200000;
@@ -56,90 +89,107 @@ $taskCount = $cpuCount;
 echo "Running {$taskCount} CPU-intensive tasks (primes up to {$primeTarget})...\n";
 echo "Each adapter tested {$iterations} times, showing average results.\n\n";
 
-$syncTimes = [];
-$threadTimes = [];
-$processTimes = [];
+$results = [];
 $primeCount = 0;
 
 for ($iter = 1; $iter <= $iterations; $iter++) {
     echo "  Iteration {$iter}/{$iterations}...\r";
 
-    // Rebuild tasks for each iteration
-    $tasks = [];
-    for ($i = 0; $i < $taskCount; $i++) {
-        $tasks[] = $createTask();
+    foreach ($adapters as $name => $class) {
+        // Rebuild tasks for each iteration
+        $tasks = [];
+        for ($i = 0; $i < $taskCount; $i++) {
+            $tasks[] = $createTask();
+        }
+
+        // Shutdown before to ensure clean state
+        $class::shutdown();
+
+        $start = microtime(true);
+        $taskResults = $class::all($tasks);
+        $results[$name][] = microtime(true) - $start;
+
+        if ($name === 'Sync' && isset($taskResults[0])) {
+            $primeCount = $taskResults[0];
+        }
+
+        // Shutdown after
+        $class::shutdown();
+
+        // Force garbage collection to release file descriptors
+        gc_collect_cycles();
     }
 
-    // Sync
-    $start = microtime(true);
-    $syncResults = Sync::all($tasks);
-    $syncTimes[] = microtime(true) - $start;
-    $primeCount = $syncResults[0] ?? 0;
-
-    // Thread (shutdown before to ensure clean state)
-    Thread::shutdown();
-    $start = microtime(true);
-    Thread::all($tasks);
-    $threadTimes[] = microtime(true) - $start;
-    Thread::shutdown();
-
-    // Process
-    Process::shutdown();
-    $start = microtime(true);
-    Process::all($tasks);
-    $processTimes[] = microtime(true) - $start;
-    Process::shutdown();
+    // Small delay between iterations to allow OS to reclaim file descriptors
+    usleep(10000); // 10ms
 }
 
 echo str_repeat(' ', 30) . "\r"; // Clear progress line
 
-// Calculate averages
-$syncAvg = array_sum($syncTimes) / count($syncTimes);
-$threadAvg = array_sum($threadTimes) / count($threadTimes);
-$processAvg = array_sum($processTimes) / count($processTimes);
+// Calculate averages and standard deviations
+$stats = [];
+$syncAvg = null;
 
-// Calculate standard deviations
-$syncStdDev = calculateStdDev($syncTimes);
-$threadStdDev = calculateStdDev($threadTimes);
-$processStdDev = calculateStdDev($processTimes);
+foreach ($adapters as $name => $class) {
+    $times = $results[$name];
+    $avg = array_sum($times) / count($times);
+    $stdDev = calculateStdDev($times);
 
-$threadSpeedup = $syncAvg / $threadAvg;
-$processSpeedup = $syncAvg / $processAvg;
+    $stats[$name] = [
+        'avg' => $avg,
+        'stddev' => $stdDev,
+        'min' => min($times),
+        'max' => max($times),
+    ];
 
-printf("%-10s %8s %8s   %s\n", 'Adapter', 'Avg', 'StdDev', 'Speedup');
-echo str_repeat('-', 50) . "\n";
-printf(
-    "%-10s %7.3fs %7.3fs   (baseline) - %d primes found\n",
-    'Sync:',
-    $syncAvg,
-    $syncStdDev,
-    $primeCount
-);
-printf(
-    "%-10s %7.3fs %7.3fs   %.2fx speedup\n",
-    'Thread:',
-    $threadAvg,
-    $threadStdDev,
-    $threadSpeedup
-);
-printf(
-    "%-10s %7.3fs %7.3fs   %.2fx speedup\n",
-    'Process:',
-    $processAvg,
-    $processStdDev,
-    $processSpeedup
-);
+    if ($name === 'Sync') {
+        $syncAvg = $avg;
+    }
+}
+
+// Print results
+printf("%-15s %8s %8s   %s\n", 'Adapter', 'Avg', 'StdDev', 'Speedup');
+echo str_repeat('-', 60) . "\n";
+
+$bestTime = PHP_FLOAT_MAX;
+$bestAdapter = '';
+
+foreach ($stats as $name => $stat) {
+    $speedup = $syncAvg / $stat['avg'];
+
+    if ($name === 'Sync') {
+        printf(
+            "%-15s %7.3fs %7.3fs   (baseline) - %d primes found\n",
+            $name . ':',
+            $stat['avg'],
+            $stat['stddev'],
+            $primeCount
+        );
+    } else {
+        printf(
+            "%-15s %7.3fs %7.3fs   %.2fx speedup\n",
+            $name . ':',
+            $stat['avg'],
+            $stat['stddev'],
+            $speedup
+        );
+
+        if ($stat['avg'] < $bestTime) {
+            $bestTime = $stat['avg'];
+            $bestAdapter = $name;
+        }
+    }
+}
 
 echo "\n";
-$winner = $threadAvg < $processAvg ? 'Thread' : 'Process';
-$improvement = max($threadSpeedup, $processSpeedup);
-printf("Winner: %s with %.2fx average speedup over sequential execution\n", $winner, $improvement);
+$improvement = $syncAvg / $bestTime;
+printf("Winner: %s with %.2fx average speedup over sequential execution\n", $bestAdapter, $improvement);
 
 // Show min/max for context
 echo "\nDetailed timing (min/max):\n";
-printf("  Sync:    %.3fs - %.3fs\n", min($syncTimes), max($syncTimes));
-printf("  Thread:  %.3fs - %.3fs\n", min($threadTimes), max($threadTimes));
-printf("  Process: %.3fs - %.3fs\n", min($processTimes), max($processTimes));
+foreach ($stats as $name => $stat) {
+    printf("  %-15s %.3fs - %.3fs\n", $name . ':', $stat['min'], $stat['max']);
+}
 
 /**
  * Calculate standard deviation of an array of values.

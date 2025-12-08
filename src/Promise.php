@@ -8,6 +8,7 @@ use Utopia\Async\Promise\Adapter\Amp as AmpAdapter;
 use Utopia\Async\Promise\Adapter\React as ReactAdapter;
 use Utopia\Async\Promise\Adapter\Swoole\Coroutine;
 use Utopia\Async\Promise\Adapter\Sync;
+use Utopia\Async\Promise\Configuration;
 
 /**
  * Promise facade for asynchronous operations.
@@ -210,5 +211,78 @@ class Promise
     public static function reject(mixed $reason): Adapter
     {
         return static::getAdapter()::reject($reason);
+    }
+
+    /**
+     * Get the initial sleep duration in microseconds for polling.
+     *
+     * @return int
+     */
+    public static function getSleepDurationUs(): int
+    {
+        return Configuration::getSleepDurationUs();
+    }
+
+    /**
+     * Set the initial sleep duration in microseconds for polling.
+     *
+     * @param int $microseconds Initial sleep duration (default: 100μs)
+     * @return void
+     */
+    public static function setSleepDurationUs(int $microseconds): void
+    {
+        Configuration::setSleepDurationUs($microseconds);
+    }
+
+    /**
+     * Get the maximum sleep duration in microseconds.
+     *
+     * @return int
+     */
+    public static function getMaxSleepDurationUs(): int
+    {
+        return Configuration::getMaxSleepDurationUs();
+    }
+
+    /**
+     * Set the maximum sleep duration in microseconds.
+     *
+     * @param int $microseconds Maximum sleep duration (default: 10ms)
+     * @return void
+     */
+    public static function setMaxSleepDurationUs(int $microseconds): void
+    {
+        Configuration::setMaxSleepDurationUs($microseconds);
+    }
+
+    /**
+     * Get the coroutine sleep duration in seconds.
+     *
+     * @return float
+     */
+    public static function getCoroutineSleepDurationS(): float
+    {
+        return Configuration::getCoroutineSleepDurationS();
+    }
+
+    /**
+     * Set the coroutine sleep duration in seconds.
+     *
+     * @param float $seconds Coroutine sleep duration (default: 1ms)
+     * @return void
+     */
+    public static function setCoroutineSleepDurationS(float $seconds): void
+    {
+        Configuration::setCoroutineSleepDurationS($seconds);
+    }
+
+    /**
+     * Reset all configuration options to their default values.
+     *
+     * @return void
+     */
+    public static function resetConfig(): void
+    {
+        Configuration::reset();
     }
 }

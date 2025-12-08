@@ -3,6 +3,7 @@
 namespace Utopia\Async\Promise;
 
 use Utopia\Async\Exception\Timeout;
+use Utopia\Async\Promise\Configuration;
 
 /**
  * Abstract Promise Adapter.
@@ -33,20 +34,6 @@ abstract class Adapter
      */
     protected const STATE_REJECTED = -1;
 
-    /**
-     * Initial sleep duration in microseconds for polling (100us)
-     */
-    protected const SLEEP_DURATION_US = 100;
-
-    /**
-     * Maximum sleep duration in microseconds (10ms)
-     */
-    protected const MAX_SLEEP_DURATION_US = 10000;
-
-    /**
-     * Coroutine sleep duration in seconds (1ms)
-     */
-    protected const COROUTINE_SLEEP_DURATION_S = 0.001;
 
     /**
      * Current state of the promise
@@ -290,13 +277,13 @@ abstract class Adapter
      */
     private function waitWithBackoff(): void
     {
-        $sleepDuration = self::SLEEP_DURATION_US;
+        $sleepDuration = Configuration::getSleepDurationUs();
 
         while ($this->isPending()) {
             $this->sleep();
 
             // Exponential backoff: double sleep duration up to maximum
-            $sleepDuration = \min($sleepDuration * 2, self::MAX_SLEEP_DURATION_US);
+            $sleepDuration = \min($sleepDuration * 2, Configuration::getMaxSleepDurationUs());
         }
     }
 

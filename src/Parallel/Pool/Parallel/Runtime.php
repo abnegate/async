@@ -2,7 +2,7 @@
 
 namespace Utopia\Async\Parallel\Pool\Parallel;
 
-use Utopia\Async\Parallel\Constants;
+use Utopia\Async\Parallel\Configuration;
 
 /**
  * Persistent Runtime Pool for ext-parallel.
@@ -150,7 +150,7 @@ class Runtime
         }
 
         $startTime = \microtime(true);
-        $timeoutSeconds = Constants::MAX_TASK_TIMEOUT_SECONDS;
+        $timeoutSeconds = Configuration::getMaxTaskTimeoutSeconds();
 
         while (!empty($futures)) {
             foreach ($futures as $index => $future) {

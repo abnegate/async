@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Comprehensive benchmark comparing Thread, Process, and Sync adapters.
+ * Comprehensive benchmark comparing all available parallel adapters.
  *
  * Usage:
  *   php benchmarks/AdapterBenchmark.php [--quick] [--iterations=N]
@@ -13,8 +13,11 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use Utopia\Async\Parallel\Adapter\Swoole\Process;
-use Utopia\Async\Parallel\Adapter\Swoole\Thread;
+use Utopia\Async\Parallel\Adapter\Swoole\Process as SwooleProcess;
+use Utopia\Async\Parallel\Adapter\Swoole\Thread as SwooleThread;
+use Utopia\Async\Parallel\Adapter\Amp;
+use Utopia\Async\Parallel\Adapter\React;
+use Utopia\Async\Parallel\Adapter\Parallel;
 use Utopia\Async\Parallel\Adapter\Sync;
 
 class AdapterBenchmark
@@ -23,22 +26,59 @@ class AdapterBenchmark
     private int $iterations;
     private array $results = [];
 
+    /**
+     * All known adapters with their display names
+     *
+     * @var array<string, class-string>
+     */
+    private array $allAdapters = [
+        'Sync' => Sync::class,
+        'Swoole Thread' => SwooleThread::class,
+        'Swoole Process' => SwooleProcess::class,
+        'Amp' => Amp::class,
+        'React' => React::class,
+        'ext-parallel' => Parallel::class,
+    ];
+
+    /**
+     * Adapters that are supported in this environment
+     *
+     * @var array<string, class-string>
+     */
+    private array $adapters = [];
+
     public function __construct(bool $quickMode = false, int $iterations = 5)
     {
         $this->quickMode = $quickMode;
         $this->iterations = $iterations;
+
+        // Detect supported adapters
+        foreach ($this->allAdapters as $name => $class) {
+            if ($class::isSupported()) {
+                $this->adapters[$name] = $class;
+            }
+        }
     }
 
     public function run(): void
     {
         $this->printHeader();
+
+        if (count($this->adapters) < 2) {
+            echo "\nERROR: At least 2 adapters required for comparison.\n";
+            echo "Please install additional dependencies.\n";
+            exit(1);
+        }
+
         $this->benchmarkCpuIntensive();
         $this->benchmarkIoSimulated();
         $this->benchmarkScaling();
         $this->printSummary();
 
-        Thread::shutdown();
-        Process::shutdown();
+        // Shutdown all adapters
+        foreach ($this->adapters as $class) {
+            $class::shutdown();
+        }
     }
 
     private function benchmarkCpuIntensive(): void
@@ -152,83 +192,99 @@ class AdapterBenchmark
     {
         if ($verbose) {
             echo "\n  {$name}\n";
-            echo str_repeat('-', 70) . "\n";
+            echo str_repeat('-', 80) . "\n";
         }
 
-        $syncTimes = [];
-        $threadTimes = [];
-        $processTimes = [];
+        $adapterTimes = [];
         $taskCount = 0;
 
+        foreach ($this->adapters as $adapterName => $class) {
+            $adapterTimes[$adapterName] = [];
+        }
+
         for ($iter = 0; $iter < $this->iterations; $iter++) {
-            // Create fresh tasks for each iteration
-            $tasks = $taskFactory();
-            $taskCount = count($tasks);
+            foreach ($this->adapters as $adapterName => $class) {
+                // Create fresh tasks for each iteration
+                $tasks = $taskFactory();
+                $taskCount = count($tasks);
 
-            // Sync
-            $start = microtime(true);
-            Sync::all($tasks);
-            $syncTimes[] = microtime(true) - $start;
+                // Shutdown before to ensure clean state
+                $class::shutdown();
 
-            // Thread (shutdown and recreate to avoid conflicts)
-            Thread::shutdown();
-            $tasks = $taskFactory(); // Fresh tasks
-            $start = microtime(true);
-            Thread::all($tasks);
-            $threadTimes[] = microtime(true) - $start;
-            Thread::shutdown();
+                $start = microtime(true);
+                $class::all($tasks);
+                $adapterTimes[$adapterName][] = microtime(true) - $start;
 
-            // Process
-            Process::shutdown();
-            $tasks = $taskFactory(); // Fresh tasks
-            $start = microtime(true);
-            Process::all($tasks);
-            $processTimes[] = microtime(true) - $start;
-            Process::shutdown();
+                // Shutdown after
+                $class::shutdown();
+
+                // Force garbage collection to release file descriptors
+                gc_collect_cycles();
+            }
+
+            // Small delay between iterations to allow OS to reclaim file descriptors
+            usleep(10000); // 10ms
         }
 
         // Calculate averages
-        $syncAvg = array_sum($syncTimes) / count($syncTimes);
-        $threadAvg = array_sum($threadTimes) / count($threadTimes);
-        $processAvg = array_sum($processTimes) / count($processTimes);
+        $stats = [];
+        $syncAvg = null;
 
-        // Calculate standard deviations
-        $syncStdDev = $this->calculateStdDev($syncTimes);
-        $threadStdDev = $this->calculateStdDev($threadTimes);
-        $processStdDev = $this->calculateStdDev($processTimes);
+        foreach ($this->adapters as $adapterName => $class) {
+            $times = $adapterTimes[$adapterName];
+            $avg = array_sum($times) / count($times);
+            $stdDev = $this->calculateStdDev($times);
 
-        $threadSpeedup = $syncAvg / $threadAvg;
-        $processSpeedup = $syncAvg / $processAvg;
+            $stats[$adapterName] = [
+                'avg' => $avg,
+                'stddev' => $stdDev,
+            ];
 
-        if ($verbose) {
-            printf("  %-12s %7.3fs (std: %.3fs)\n", 'Sync:', $syncAvg, $syncStdDev);
-            printf("  %-12s %7.3fs (std: %.3fs)  %.2fx speedup\n", 'Thread:', $threadAvg, $threadStdDev, $threadSpeedup);
-            printf("  %-12s %7.3fs (std: %.3fs)  %.2fx speedup\n", 'Process:', $processAvg, $processStdDev, $processSpeedup);
-
-            $winner = $threadAvg < $processAvg ? 'Thread' : 'Process';
-            $winnerAvg = min($threadAvg, $processAvg);
-            $improvement = (1 - ($winnerAvg / $syncAvg)) * 100;
-            printf("  Winner: %s (%.1f%% faster than sync, %d iterations)\n", $winner, $improvement, $this->iterations);
-        } else {
-            printf(
-                "  %3d tasks: Sync=%.3fs, Thread=%.3fs (%.2fx), Process=%.3fs (%.2fx)\n",
-                $taskCount,
-                $syncAvg,
-                $threadAvg,
-                $threadSpeedup,
-                $processAvg,
-                $processSpeedup
-            );
+            if ($adapterName === 'Sync') {
+                $syncAvg = $avg;
+            }
         }
 
-        $this->results[$name] = [
-            'sync' => $syncAvg,
-            'thread' => $threadAvg,
-            'process' => $processAvg,
-            'sync_stddev' => $syncStdDev,
-            'thread_stddev' => $threadStdDev,
-            'process_stddev' => $processStdDev,
-        ];
+        if ($verbose) {
+            foreach ($stats as $adapterName => $stat) {
+                $speedup = $syncAvg / $stat['avg'];
+                if ($adapterName === 'Sync') {
+                    printf("  %-15s %7.3fs (std: %.3fs)\n", $adapterName . ':', $stat['avg'], $stat['stddev']);
+                } else {
+                    printf("  %-15s %7.3fs (std: %.3fs)  %.2fx speedup\n", $adapterName . ':', $stat['avg'], $stat['stddev'], $speedup);
+                }
+            }
+
+            // Find winner
+            $bestTime = PHP_FLOAT_MAX;
+            $winner = '';
+            foreach ($stats as $adapterName => $stat) {
+                if ($adapterName !== 'Sync' && $stat['avg'] < $bestTime) {
+                    $bestTime = $stat['avg'];
+                    $winner = $adapterName;
+                }
+            }
+
+            if ($winner) {
+                $improvement = (1 - ($bestTime / $syncAvg)) * 100;
+                printf("  Winner: %s (%.1f%% faster than sync, %d iterations)\n", $winner, $improvement, $this->iterations);
+            }
+        } else {
+            // Compact output for scaling tests
+            $output = sprintf("  %3d tasks:", $taskCount);
+            foreach ($stats as $adapterName => $stat) {
+                $speedup = $syncAvg / $stat['avg'];
+                if ($adapterName === 'Sync') {
+                    $output .= sprintf(" %s=%.3fs", $adapterName, $stat['avg']);
+                } else {
+                    $shortName = str_replace(['Swoole ', 'ext-'], ['', ''], $adapterName);
+                    $output .= sprintf(", %s=%.3fs (%.1fx)", $shortName, $stat['avg'], $speedup);
+                }
+            }
+            echo $output . "\n";
+        }
+
+        $this->results[$name] = $stats;
     }
 
     private function calculateStdDev(array $values): float
@@ -296,62 +352,91 @@ class AdapterBenchmark
     private function printHeader(): void
     {
         echo "\n";
-        echo "╔══════════════════════════════════════════════════════════════════════╗\n";
-        echo "║           Parallel Adapter Benchmark - Thread vs Process             ║\n";
-        echo "╚══════════════════════════════════════════════════════════════════════╝\n\n";
+        echo "╔══════════════════════════════════════════════════════════════════════════════╗\n";
+        echo "║              Parallel Adapter Benchmark - All Adapters                       ║\n";
+        echo "╚══════════════════════════════════════════════════════════════════════════════╝\n\n";
 
         $cpuCount = function_exists('swoole_cpu_num') ? swoole_cpu_num() : 'unknown';
         echo "System Info:\n";
         echo "  PHP Version: " . PHP_VERSION . "\n";
-        echo "  Swoole Version: " . SWOOLE_VERSION . "\n";
+        if (defined('SWOOLE_VERSION')) {
+            echo "  Swoole Version: " . SWOOLE_VERSION . "\n";
+        }
         echo "  CPU Cores: {$cpuCount}\n";
         echo "  Mode: " . ($this->quickMode ? 'Quick' : 'Full') . "\n";
         echo "  Iterations: {$this->iterations} per test\n";
+
+        echo "\nDetected adapters:\n";
+        foreach ($this->allAdapters as $name => $class) {
+            $supported = isset($this->adapters[$name]) ? '[x]' : '[ ]';
+            echo "  {$supported} {$name}\n";
+        }
     }
 
     private function printSection(string $title): void
     {
-        echo "\n┌" . str_repeat('─', 68) . "┐\n";
-        echo "│ " . str_pad($title, 66) . " │\n";
-        echo "└" . str_repeat('─', 68) . "┘\n";
+        echo "\n┌" . str_repeat('─', 78) . "┐\n";
+        echo "│ " . str_pad($title, 76) . " │\n";
+        echo "└" . str_repeat('─', 78) . "┘\n";
     }
 
     private function printSummary(): void
     {
         $this->printSection('Summary');
 
-        $threadWins = 0;
-        $processWins = 0;
-        $totalThreadSpeedup = 0;
-        $totalProcessSpeedup = 0;
-        $count = 0;
+        $adapterWins = [];
+        $adapterSpeedups = [];
 
-        foreach ($this->results as $times) {
-            $threadSpeedup = $times['sync'] / $times['thread'];
-            $processSpeedup = $times['sync'] / $times['process'];
-            $totalThreadSpeedup += $threadSpeedup;
-            $totalProcessSpeedup += $processSpeedup;
-            $count++;
-
-            if ($times['thread'] < $times['process']) {
-                $threadWins++;
-            } else {
-                $processWins++;
+        foreach ($this->adapters as $name => $class) {
+            if ($name !== 'Sync') {
+                $adapterWins[$name] = 0;
+                $adapterSpeedups[$name] = [];
             }
         }
 
-        $avgThreadSpeedup = $totalThreadSpeedup / $count;
-        $avgProcessSpeedup = $totalProcessSpeedup / $count;
+        foreach ($this->results as $testName => $stats) {
+            $syncAvg = $stats['Sync']['avg'] ?? 1;
+            $bestTime = PHP_FLOAT_MAX;
+            $winner = '';
+
+            foreach ($stats as $adapterName => $stat) {
+                if ($adapterName !== 'Sync') {
+                    $speedup = $syncAvg / $stat['avg'];
+                    $adapterSpeedups[$adapterName][] = $speedup;
+
+                    if ($stat['avg'] < $bestTime) {
+                        $bestTime = $stat['avg'];
+                        $winner = $adapterName;
+                    }
+                }
+            }
+
+            if ($winner) {
+                $adapterWins[$winner]++;
+            }
+        }
 
         echo "\n";
-        printf("  Thread adapter:  %d wins, %.2fx average speedup\n", $threadWins, $avgThreadSpeedup);
-        printf("  Process adapter: %d wins, %.2fx average speedup\n", $processWins, $avgProcessSpeedup);
+        printf("  %-15s %8s %12s\n", 'Adapter', 'Wins', 'Avg Speedup');
+        echo str_repeat('-', 40) . "\n";
+
+        foreach ($adapterWins as $name => $wins) {
+            $avgSpeedup = !empty($adapterSpeedups[$name])
+                ? array_sum($adapterSpeedups[$name]) / count($adapterSpeedups[$name])
+                : 0;
+            printf("  %-15s %8d %11.2fx\n", $name, $wins, $avgSpeedup);
+        }
+
         echo "\n";
 
-        if ($avgThreadSpeedup > $avgProcessSpeedup) {
-            echo "  Recommendation: Thread adapter for best average performance.\n";
+        // Find overall recommendation
+        $maxWins = max($adapterWins);
+        $bestAdapters = array_keys(array_filter($adapterWins, fn($w) => $w === $maxWins));
+
+        if (count($bestAdapters) === 1) {
+            echo "  Recommendation: {$bestAdapters[0]} adapter for best overall performance.\n";
         } else {
-            echo "  Recommendation: Process adapter for best average performance.\n";
+            echo "  Recommendation: " . implode(' or ', $bestAdapters) . " for best overall performance.\n";
         }
         echo "\n";
     }
