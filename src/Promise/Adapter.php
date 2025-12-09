@@ -3,7 +3,6 @@
 namespace Utopia\Async\Promise;
 
 use Utopia\Async\Exception\Timeout;
-use Utopia\Async\Promise\Configuration;
 
 /**
  * Abstract Promise Adapter.
@@ -66,11 +65,11 @@ abstract class Adapter
         if (\is_null($executor)) {
             return;
         }
-        $resolve = function ($value) {
-            $this->settle($value, static::STATE_FULFILLED);
+        $resolve = function (mixed $value): void {
+            $this->settle($value, self::STATE_FULFILLED);
         };
-        $reject = function ($value) {
-            $this->settle($value, static::STATE_REJECTED);
+        $reject = function (mixed $value): void {
+            $this->settle($value, self::STATE_REJECTED);
         };
         $this->execute($executor, $resolve, $reject);
     }
@@ -240,9 +239,12 @@ abstract class Adapter
                 $onFinally();
                 return $value;
             },
-            function ($reason) use ($onFinally) {
+            function (mixed $reason) use ($onFinally) {
                 $onFinally();
-                throw $reason;
+                if ($reason instanceof \Throwable) {
+                    throw $reason;
+                }
+                throw new \RuntimeException(\is_string($reason) ? $reason : 'Promise rejected');
             }
         );
     }

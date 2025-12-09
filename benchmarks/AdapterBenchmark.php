@@ -13,11 +13,10 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
+use Utopia\Async\Parallel\Adapter\Parallel;
+use Utopia\Async\Parallel\Adapter\React;
 use Utopia\Async\Parallel\Adapter\Swoole\Process as SwooleProcess;
 use Utopia\Async\Parallel\Adapter\Swoole\Thread as SwooleThread;
-use Utopia\Async\Parallel\Adapter\Amp;
-use Utopia\Async\Parallel\Adapter\React;
-use Utopia\Async\Parallel\Adapter\Parallel;
 use Utopia\Async\Parallel\Adapter\Sync;
 
 class AdapterBenchmark
@@ -35,7 +34,7 @@ class AdapterBenchmark
         'Sync' => Sync::class,
         'Swoole Thread' => SwooleThread::class,
         'Swoole Process' => SwooleProcess::class,
-        'Amp' => Amp::class,
+        'AMPHP' => Amp::class,
         'React' => React::class,
         'ext-parallel' => Parallel::class,
     ];
@@ -431,7 +430,7 @@ class AdapterBenchmark
 
         // Find overall recommendation
         $maxWins = max($adapterWins);
-        $bestAdapters = array_keys(array_filter($adapterWins, fn($w) => $w === $maxWins));
+        $bestAdapters = array_keys(array_filter($adapterWins, fn ($w) => $w === $maxWins));
 
         if (count($bestAdapters) === 1) {
             echo "  Recommendation: {$bestAdapters[0]} adapter for best overall performance.\n";

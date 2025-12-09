@@ -81,7 +81,11 @@ class Process
 
                     try {
                         // Deserialize the task using opis/closure
-                        $task = \Opis\Closure\unserialize($taskData['task']);
+                        $serializedTask = $taskData['task'];
+                        if (!\is_string($serializedTask)) {
+                            throw new \RuntimeException('Task data is not a string');
+                        }
+                        $task = \Opis\Closure\unserialize($serializedTask);
 
                         if (!\is_callable($task)) {
                             throw new \RuntimeException('Task is not callable');
@@ -208,7 +212,7 @@ class Process
                 // Use native unserialize for response (results don't contain closures)
                 $result = @\unserialize(\is_string($response) ? $response : '', ['allowed_classes' => true]);
 
-                if (!\is_array($result) || !isset($result['index'])) {
+                if (!\is_array($result) || !isset($result['index']) || !\is_int($result['index'])) {
                     continue;
                 }
 

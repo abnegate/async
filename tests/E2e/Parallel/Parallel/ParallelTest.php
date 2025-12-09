@@ -36,7 +36,7 @@ class ParallelTest extends TestCase
 
     public function testRunWithArguments(): void
     {
-        $result = Parallel::run(function ($a, $b) {
+        $result = Parallel::run(function (int $a, int $b) {
             return $a + $b;
         }, 5, 3);
 
@@ -74,7 +74,7 @@ class ParallelTest extends TestCase
     {
         $items = [1, 2, 3, 4, 5];
 
-        $results = Parallel::map($items, function ($item) {
+        $results = Parallel::map($items, function (int $item) {
             return $item * 2;
         });
 
@@ -83,7 +83,7 @@ class ParallelTest extends TestCase
 
     public function testMapWithEmptyArray(): void
     {
-        $results = Parallel::map([], function ($item) {
+        $results = Parallel::map([], function (int $item) {
             return $item * 2;
         });
 
@@ -94,7 +94,7 @@ class ParallelTest extends TestCase
     {
         $items = range(1, 10);
 
-        $results = Parallel::map($items, function ($item) {
+        $results = Parallel::map($items, function (int $item) {
             return $item * 3;
         }, 2);
 
@@ -110,7 +110,7 @@ class ParallelTest extends TestCase
     {
         $items = ['a', 'b', 'c'];
 
-        $results = Parallel::map($items, function ($item, $index) {
+        $results = Parallel::map($items, function (string $item, int $index) {
             return $index . ':' . $item;
         });
 
@@ -301,6 +301,8 @@ class ParallelTest extends TestCase
         $expectedSum = 333833500;
 
         foreach ($results as $idx => $result) {
+            $this->assertIsArray($result);
+            /** @var array{index: int, sum: int} $result */
             $this->assertEquals($idx, $result['index']);
             $this->assertEquals($expectedSum, $result['sum']);
         }

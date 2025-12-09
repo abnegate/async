@@ -91,10 +91,10 @@ class ReactTest extends TestCase
     public function testThen(): void
     {
         $promise = React::resolve(5)
-            ->then(function ($value) {
+            ->then(function (int $value): int {
                 return $value * 2;
             })
-            ->then(function ($value) {
+            ->then(function (int $value): int {
                 return $value + 3;
             });
 
@@ -112,7 +112,7 @@ class ReactTest extends TestCase
     public function testCatch(): void
     {
         $promise = React::reject(new \Exception('error'))
-            ->catch(function ($error) {
+            ->catch(function (\Throwable $error) {
                 return 'caught: ' . $error->getMessage();
             });
 
@@ -208,7 +208,10 @@ class ReactTest extends TestCase
 
         $results = React::allSettled($promises)->await();
 
+        $this->assertIsArray($results);
         $this->assertCount(2, $results);
+        $this->assertIsArray($results[0]);
+        $this->assertIsArray($results[1]);
         $this->assertEquals('fulfilled', $results[0]['status']);
         $this->assertEquals('success', $results[0]['value']);
         $this->assertEquals('rejected', $results[1]['status']);
@@ -250,13 +253,13 @@ class ReactTest extends TestCase
     public function testChaining(): void
     {
         $result = React::resolve(10)
-            ->then(function ($v) {
+            ->then(function (int $v): int {
                 return $v * 2;
             })
-            ->then(function ($v) {
+            ->then(function (int $v): int {
                 return $v + 5;
             })
-            ->then(function ($v) {
+            ->then(function (int $v): float {
                 return $v / 5;
             })
             ->await();
@@ -321,8 +324,8 @@ class ReactTest extends TestCase
     public function testCatchConvertsRejectionToFulfillment(): void
     {
         $promise = React::reject(new \Exception('error'))
-            ->catch(fn ($e) => 'recovered: ' . $e->getMessage())
-            ->then(fn ($v) => 'after: ' . $v);
+            ->catch(fn (\Throwable $e): string => 'recovered: ' . $e->getMessage())
+            ->then(fn (string $v): string => 'after: ' . $v);
 
         $this->assertEquals('after: recovered: error', $promise->await());
     }
@@ -331,7 +334,7 @@ class ReactTest extends TestCase
     {
         $callCount = 0;
 
-        $promise = React::create(function ($resolve) use (&$callCount) {
+        $promise = React::create(function (callable $resolve) use (&$callCount) {
             $resolve('first');
             $resolve('second');
             $resolve('third');
@@ -344,7 +347,7 @@ class ReactTest extends TestCase
 
     public function testMultipleRejectCallsIgnored(): void
     {
-        $promise = React::create(function ($resolve, $reject) {
+        $promise = React::create(function (callable $resolve, callable $reject) {
             $reject(new \Exception('first'));
             $reject(new \Exception('second'));
         });

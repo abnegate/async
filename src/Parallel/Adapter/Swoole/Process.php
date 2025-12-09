@@ -76,6 +76,7 @@ class Process extends Adapter
         }
 
         if (Exception::isError($data)) {
+            /** @var array<string, mixed> $data */
             throw Exception::fromArray($data);
         }
 
@@ -227,7 +228,10 @@ class Process extends Adapter
                     }
 
                     $index = $taskData['index'] ?? null;
-                    if ($index === null || !isset($tasks[$index])) {
+                    if (!\is_int($index) && !\is_string($index)) {
+                        continue;
+                    }
+                    if (!isset($tasks[$index])) {
                         continue;
                     }
 
@@ -317,10 +321,15 @@ class Process extends Adapter
                     continue;
                 }
 
+                $resultIndex = $result['index'];
+                if (!\is_int($resultIndex) && !\is_string($resultIndex)) {
+                    continue;
+                }
+
                 if (Exception::isError($result)) {
-                    $results[$result['index']] = null;
+                    $results[$resultIndex] = null;
                 } else {
-                    $results[$result['index']] = $result['result'] ?? null;
+                    $results[$resultIndex] = $result['result'] ?? null;
                 }
 
                 $completed++;
@@ -352,9 +361,12 @@ class Process extends Adapter
 
         // Wait for our specific worker processes using non-blocking wait
         while (!empty($pidsToWait)) {
-            $result = SwooleProcess::wait(false); // Non-blocking
-            if ($result !== false && \is_array($result) && isset($result['pid'])) {
-                unset($pidsToWait[$result['pid']]);
+            $waitResult = SwooleProcess::wait(false); // Non-blocking
+            if ($waitResult !== false && \is_array($waitResult) && isset($waitResult['pid'])) {
+                $pid = $waitResult['pid'];
+                if (\is_int($pid)) {
+                    unset($pidsToWait[$pid]);
+                }
             } else {
                 // No child ready yet, use non-blocking sleep to avoid CPU spin
                 if (SwooleCoroutine::getCid() > 0) {

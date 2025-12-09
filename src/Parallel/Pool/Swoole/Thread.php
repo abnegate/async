@@ -195,14 +195,15 @@ class Thread
             // busy-spinning as it yields CPU between checks.
 
             // Track pending task indices for O(n) collection instead of O(n²)
-            $pendingIndices = \array_flip(\array_keys($taskIndexMap));
+            /** @var array<int, true> $pendingIndices */
+            $pendingIndices = \array_fill_keys(\array_keys($taskIndexMap), true);
 
             // Use proper time-based timeout (30 seconds default)
             $startTime = \microtime(true);
             $timeoutSeconds = Configuration::getMaxTaskTimeoutSeconds();
             $deadline = $startTime + $timeoutSeconds;
 
-            while (!empty($pendingIndices)) {
+            while (\count($pendingIndices) > 0) {
                 // Collect available results (O(n) per iteration, only checks pending indices)
                 $this->collectResults($taskIndexMap, $results, $pendingIndices);
 
@@ -288,17 +289,23 @@ class Thread
 
             if (!empty($result['error'])) {
                 $results[$originalIndex] = null;
-                $exception = $result['exception'] ?? '';
-                if (\is_string($exception) && $exception !== '') {
+                $exceptionStr = $result['exception'] ?? '';
+                /** @var array<string, mixed> $exceptionArray */
+                $exceptionArray = [];
+                if ($exceptionStr !== '') {
                     try {
-                        $exception = \unserialize($exception);
+                        $unserialized = \unserialize($exceptionStr);
+                        if (\is_array($unserialized)) {
+                            /** @var array<string, mixed> $exceptionArray */
+                            $exceptionArray = $unserialized;
+                        }
                     } catch (\Throwable $e) {
-                        $exception = ['deserialization_error' => $e->getMessage()];
+                        $exceptionArray = ['deserialization_error' => $e->getMessage()];
                     }
                 }
                 $this->lastErrors[$originalIndex] = [
                     'message' => $result['message'] ?? 'Unknown error',
-                    'exception' => \is_array($exception) ? $exception : [],
+                    'exception' => $exceptionArray,
                 ];
             } else {
                 $value = $result['value'] ?? null;

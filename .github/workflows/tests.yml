@@ -61,7 +61,7 @@ jobs:
           sleep 10
 
       - name: Run Unit Tests
-        run: docker compose exec -T tests vendor/bin/phpunit /usr/src/code/tests/unit
+        run: docker compose exec -T tests vendor/bin/phpunit /usr/src/code/tests/Unit
 
   promise_adapter_test:
     name: Promise Adapter Tests
@@ -73,7 +73,7 @@ jobs:
         adapter:
           - Sync
           - Swoole/Coroutine
-          - Amp/Amp
+          - AMPHP/AMPHP
           - React/React
 
     steps:
@@ -106,7 +106,7 @@ jobs:
         adapter:
           - Swoole/Process
           - Swoole/Thread
-          - Amp/Amp
+          - AMPHP/AMPHP
           - React/React
           - Parallel/Parallel
 

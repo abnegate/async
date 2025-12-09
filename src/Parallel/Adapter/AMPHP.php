@@ -8,10 +8,10 @@ use Amp\Parallel\Worker\ContextWorkerPool;
 use Amp\Parallel\Worker\WorkerPool;
 use Utopia\Async\Exception\Adapter as AdapterException;
 use Utopia\Async\Parallel\Adapter;
-use Utopia\Async\Parallel\Adapter\Amp\Task;
+use Utopia\Async\Parallel\Adapter\AMPHP\Task;
 
 /**
- * Amp Parallel Adapter.
+ * AMPHP Parallel Adapter.
  *
  * Parallel execution implementation using amphp/parallel for efficient multi-process
  * or multi-threaded parallel processing. Uses worker pools for task execution with
@@ -25,7 +25,7 @@ use Utopia\Async\Parallel\Adapter\Amp\Task;
  * @internal Use Utopia\Async\Parallel facade instead
  * @package Utopia\Async\Parallel\Adapter
  */
-class Amp extends Adapter
+class AMPHP extends Adapter
 {
     /**
      * Default worker pool instance
@@ -33,7 +33,7 @@ class Amp extends Adapter
     private static ?WorkerPool $pool = null;
 
     /**
-     * Whether Amp support has been verified
+     * Whether AMPHP support has been verified
      */
     private static bool $supportVerified = false;
 
@@ -43,7 +43,7 @@ class Amp extends Adapter
      * @param callable $task The task to execute in parallel
      * @param mixed ...$args Arguments to pass to the task
      * @return mixed The result of the task execution
-     * @throws AdapterException If Amp parallel support is not available
+     * @throws AdapterException If AMPHP parallel support is not available
      * @throws \Throwable If the task throws an exception
      */
     public static function run(callable $task, mixed ...$args): mixed
@@ -64,7 +64,7 @@ class Amp extends Adapter
      *
      * @param array<callable> $tasks Array of callables to execute
      * @return array<mixed> Array of results corresponding to each task
-     * @throws AdapterException If Amp parallel support is not available
+     * @throws AdapterException If AMPHP parallel support is not available
      */
     public static function all(array $tasks): array
     {
@@ -102,7 +102,7 @@ class Amp extends Adapter
      * @param callable $callback Function to apply to each item: fn($item, $index) => mixed
      * @param int|null $workers Number of workers to use (null = auto-detect CPU cores)
      * @return array<mixed> Array of results in the same order as input
-     * @throws AdapterException If Amp parallel support is not available
+     * @throws AdapterException If AMPHP parallel support is not available
      */
     public static function map(array $items, callable $callback, ?int $workers = null): array
     {
@@ -143,7 +143,7 @@ class Amp extends Adapter
      * @param callable $callback Function to apply to each item: fn($item, $index) => void
      * @param int|null $workers Number of workers to use (null = auto-detect CPU cores)
      * @return void
-     * @throws AdapterException If Amp parallel support is not available
+     * @throws AdapterException If AMPHP parallel support is not available
      */
     public static function forEach(array $items, callable $callback, ?int $workers = null): void
     {
@@ -172,7 +172,7 @@ class Amp extends Adapter
      * @param array<callable> $tasks Array of callables to execute
      * @param int $maxConcurrency Maximum number of workers to run simultaneously
      * @return array<mixed> Array of results corresponding to each task
-     * @throws AdapterException If Amp parallel support is not available
+     * @throws AdapterException If AMPHP parallel support is not available
      * @throws \Throwable
      */
     public static function pool(array $tasks, int $maxConcurrency): array
@@ -209,7 +209,7 @@ class Amp extends Adapter
      * Get or create the default worker pool.
      *
      * @return WorkerPool The worker pool instance
-     * @throws AdapterException If Amp parallel support is not available
+     * @throws AdapterException If AMPHP parallel support is not available
      */
     public static function getPool(): WorkerPool
     {
@@ -253,7 +253,7 @@ class Amp extends Adapter
     }
 
     /**
-     * Wrap a callable task for Amp parallel execution.
+     * Wrap a callable task for AMPHP parallel execution.
      *
      * @param callable $task The task to wrap
      * @param array<mixed> $args Arguments to pass to the task
@@ -266,9 +266,9 @@ class Amp extends Adapter
     }
 
     /**
-     * Check if Amp parallel support is available.
+     * Check if AMPHP parallel support is available.
      *
-     * @return bool True if Amp parallel support is available
+     * @return bool True if AMPHP parallel support is available
      */
     public static function isSupported(): bool
     {
@@ -276,10 +276,10 @@ class Amp extends Adapter
     }
 
     /**
-     * Check if Amp parallel support is available.
+     * Check if AMPHP parallel support is available.
      *
      * @return void
-     * @throws AdapterException If Amp parallel support is not available
+     * @throws AdapterException If AMPHP parallel support is not available
      */
     protected static function checkSupport(): void
     {
@@ -289,7 +289,7 @@ class Amp extends Adapter
 
         if (!\function_exists('Amp\Parallel\Worker\workerPool')) {
             throw new AdapterException(
-                'Amp parallel support is not available. Please install amphp/parallel: composer require amphp/parallel'
+                'AMPHP parallel support is not available. Please install amphp/parallel: composer require amphp/parallel'
             );
         }
 

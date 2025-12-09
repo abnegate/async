@@ -204,10 +204,8 @@ class React extends Adapter
             &$processState
         ): void {
             while ($activeProcesses < $maxConcurrency && !empty($taskQueue)) {
+                /** @var array{index: int|string, task: callable(): mixed, args: array<mixed>} $taskData */
                 $taskData = \array_shift($taskQueue);
-                if ($taskData === null) {
-                    break;
-                }
                 $index = $taskData['index'];
                 $task = $taskData['task'];
                 $args = $taskData['args'];
@@ -240,17 +238,13 @@ class React extends Adapter
                     $stdin->end();
                 }
 
-                if ($process->stdout !== null) {
-                    $process->stdout->on('data', function ($chunk) use ($state): void {
-                        $state->output .= $chunk;
-                    });
-                }
+                $process->stdout?->on('data', function (string $chunk) use ($state): void {
+                    $state->output .= $chunk;
+                });
 
-                if ($process->stderr !== null) {
-                    $process->stderr->on('data', function ($chunk) use ($state): void {
-                        $state->errorOutput .= $chunk;
-                    });
-                }
+                $process->stderr?->on('data', function (string $chunk) use ($state): void {
+                    $state->errorOutput .= $chunk;
+                });
 
                 $process->on('exit', function ($exitCode) use (
                     $index,

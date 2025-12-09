@@ -49,7 +49,7 @@ class Promise
      * Auto-detects the best available adapter with the following priority:
      * 1. Swoole Coroutine (requires Swoole extension)
      * 2. ReactPHP (requires react/event-loop)
-     * 3. Amp (requires amphp/amp and revolt/event-loop)
+     * 3. AMPHP (requires amphp/amp and revolt/event-loop)
      * 4. Sync (always available, synchronous fallback)
      *
      * @return class-string<Adapter>
@@ -147,7 +147,12 @@ class Promise
      */
     public static function map(array $callables): Adapter
     {
-        return static::all(\array_map(static::async(...), $callables));
+        /** @var array<Adapter> $promises */
+        $promises = \array_map(
+            static::async(...),
+            $callables
+        );
+        return static::all($promises);
     }
 
     /**
@@ -226,7 +231,7 @@ class Promise
     /**
      * Set the initial sleep duration in microseconds for polling.
      *
-     * @param int $microseconds Initial sleep duration (default: 100μs)
+     * @param int $microseconds Initial sleep duration
      * @return void
      */
     public static function setSleepDurationUs(int $microseconds): void
@@ -247,7 +252,7 @@ class Promise
     /**
      * Set the maximum sleep duration in microseconds.
      *
-     * @param int $microseconds Maximum sleep duration (default: 10ms)
+     * @param int $microseconds Maximum sleep duration
      * @return void
      */
     public static function setMaxSleepDurationUs(int $microseconds): void

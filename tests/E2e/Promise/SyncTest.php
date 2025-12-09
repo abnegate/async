@@ -84,10 +84,10 @@ class SyncTest extends TestCase
     public function testThen(): void
     {
         $promise = Sync::resolve(5)
-            ->then(function ($value) {
+            ->then(function (int $value) {
                 return $value * 2;
             })
-            ->then(function ($value) {
+            ->then(function (int $value) {
                 return $value + 3;
             });
 
@@ -105,7 +105,7 @@ class SyncTest extends TestCase
     public function testCatch(): void
     {
         $promise = Sync::reject(new \Exception('error'))
-            ->catch(function ($error) {
+            ->catch(function (\Throwable $error) {
                 return 'caught: ' . $error->getMessage();
             });
 
@@ -199,13 +199,16 @@ class SyncTest extends TestCase
             Sync::reject(new \Exception('error')),
         ];
 
+        /** @var array<int, array{status: string, value?: mixed, reason?: mixed}> $results */
         $results = Sync::allSettled($promises)->await();
 
         $this->assertCount(2, $results);
         $this->assertEquals('fulfilled', $results[0]['status']);
-        $this->assertEquals('success', $results[0]['value']);
+        $this->assertArrayHasKey('value', $results[0]);
+        $this->assertEquals('success', $results[0]['value'] ?? null);
         $this->assertEquals('rejected', $results[1]['status']);
-        $this->assertInstanceOf(\Exception::class, $results[1]['reason']);
+        $this->assertArrayHasKey('reason', $results[1]);
+        $this->assertInstanceOf(\Exception::class, $results[1]['reason'] ?? null);
     }
 
     public function testAny(): void
@@ -243,13 +246,13 @@ class SyncTest extends TestCase
     public function testChaining(): void
     {
         $result = Sync::resolve(10)
-            ->then(function ($v) {
+            ->then(function (int $v) {
                 return $v * 2;
             })
-            ->then(function ($v) {
+            ->then(function (int $v) {
                 return $v + 5;
             })
-            ->then(function ($v) {
+            ->then(function (int $v) {
                 return $v / 5;
             })
             ->await();
@@ -270,14 +273,14 @@ class SyncTest extends TestCase
 
         $start = microtime(true);
 
-        $promise1 = Sync::create(function ($resolve) use (&$executionOrder) {
+        $promise1 = Sync::create(function (callable $resolve) use (&$executionOrder) {
             $executionOrder[] = 'start-1';
             usleep(10000); // 10ms
             $executionOrder[] = 'end-1';
             $resolve(1);
         });
 
-        $promise2 = Sync::create(function ($resolve) use (&$executionOrder) {
+        $promise2 = Sync::create(function (callable $resolve) use (&$executionOrder) {
             $executionOrder[] = 'start-2';
             usleep(10000); // 10ms
             $executionOrder[] = 'end-2';
@@ -341,10 +344,10 @@ class SyncTest extends TestCase
     {
         $promise = Sync::reject(new \Exception('original error'))
             ->then(
-                function ($value) {
+                function (string $value) {
                     return 'fulfilled: ' . $value;
                 },
-                function ($error) {
+                function (\Throwable $error) {
                     return 'rejected: ' . $error->getMessage();
                 }
             );
@@ -367,15 +370,15 @@ class SyncTest extends TestCase
     public function testCatchConvertsRejectionToFulfillment(): void
     {
         $promise = Sync::reject(new \Exception('error'))
-            ->catch(fn ($e) => 'recovered: ' . $e->getMessage())
-            ->then(fn ($v) => 'after: ' . $v);
+            ->catch(fn (\Throwable $e) => 'recovered: ' . $e->getMessage())
+            ->then(fn (string $v) => 'after: ' . $v);
 
         $this->assertEquals('after: recovered: error', $promise->await());
     }
 
     public function testExecutorExceptionBecomesRejection(): void
     {
-        $promise = Sync::create(function ($resolve, $reject) {
+        $promise = Sync::create(function (callable $resolve, callable $reject) {
             throw new \RuntimeException('executor threw');
         });
 
@@ -463,7 +466,7 @@ class SyncTest extends TestCase
     {
         $callCount = 0;
 
-        $promise = Sync::create(function ($resolve) use (&$callCount) {
+        $promise = Sync::create(function (callable $resolve) use (&$callCount) {
             $resolve('first');
             $resolve('second'); // Should be ignored
             $resolve('third'); // Should be ignored
@@ -476,7 +479,7 @@ class SyncTest extends TestCase
 
     public function testMultipleRejectCallsIgnored(): void
     {
-        $promise = Sync::create(function ($resolve, $reject) {
+        $promise = Sync::create(function (callable $resolve, callable $reject) {
             $reject(new \Exception('first'));
             $reject(new \Exception('second')); // Should be ignored
         });

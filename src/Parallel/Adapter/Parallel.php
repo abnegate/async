@@ -33,6 +33,11 @@ class Parallel extends Adapter
      */
     private static bool $supportVerified = false;
 
+    /**
+     * Cached autoloader path
+     */
+    private static ?string $cachedAutoloader = null;
+
 
     /**
      * Run a callable in a separate thread and return the result.
@@ -47,20 +52,21 @@ class Parallel extends Adapter
     {
         static::checkSupport();
 
-        // Wrap task with arguments
-        $wrappedTask = function () use ($task, $args) {
-            return $task(...$args);
-        };
+        $closure = $task instanceof \Closure ? $task : \Closure::fromCallable($task);
 
         $pool = static::getPool();
-        $results = $pool->execute([$wrappedTask]);
 
-        // For single task execution, re-throw any exception
+        if (empty($args)) {
+            $results = $pool->execute([$closure]);
+        } else {
+            $results = $pool->execute([['task' => $closure, 'args' => $args]]);
+        }
+
         if ($pool->hasErrors()) {
             $errors = $pool->getLastErrors();
             if (isset($errors[0])) {
-                $message = $errors[0]['message'] ?? 'Task execution failed';
-                throw new \Exception($message);
+                $previous = $errors[0]['exception'] ?? null;
+                throw new \Exception($errors[0]['message'], 0, $previous);
             }
         }
 
@@ -109,32 +115,25 @@ class Parallel extends Adapter
             return [];
         }
 
-        $chunks = static::chunkItems($items, $workers);
+        $closure = $callback instanceof \Closure ? $callback : \Closure::fromCallable($callback);
+        $workerCount = $workers ?? static::getCPUCount();
 
-        // Create tasks that process chunks
         $tasks = [];
-        foreach ($chunks as $chunk) {
-            $tasks[] = static function () use ($chunk, $callback): array {
-                $results = [];
-                foreach ($chunk as $index => $item) {
-                    $results[$index] = $callback($item, $index);
-                }
-                return $results;
-            };
+        foreach ($items as $index => $item) {
+            $tasks[$index] = [
+                'task' => $closure,
+                'args' => [$item, $index],
+            ];
         }
 
-        $chunkResults = static::all($tasks);
+        $autoloader = static::findAutoloader();
+        $pool = new RuntimePool($workerCount, $autoloader);
 
-        $allResults = [];
-        foreach ($chunkResults as $chunk) {
-            if (\is_array($chunk)) {
-                foreach ($chunk as $index => $value) {
-                    $allResults[$index] = $value;
-                }
-            }
+        try {
+            return $pool->execute($tasks);
+        } finally {
+            $pool->shutdown();
         }
-
-        return $allResults;
     }
 
     /**
@@ -154,18 +153,25 @@ class Parallel extends Adapter
             return;
         }
 
-        $chunks = static::chunkItems($items, $workers);
+        $closure = $callback instanceof \Closure ? $callback : \Closure::fromCallable($callback);
+        $workerCount = $workers ?? static::getCPUCount();
 
         $tasks = [];
-        foreach ($chunks as $chunk) {
-            $tasks[] = static function () use ($chunk, $callback): void {
-                foreach ($chunk as $index => $item) {
-                    $callback($item, $index);
-                }
-            };
+        foreach ($items as $index => $item) {
+            $tasks[] = [
+                'task' => $closure,
+                'args' => [$item, $index],
+            ];
         }
 
-        static::all($tasks);
+        $autoloader = static::findAutoloader();
+        $pool = new RuntimePool($workerCount, $autoloader);
+
+        try {
+            $pool->execute($tasks);
+        } finally {
+            $pool->shutdown();
+        }
     }
 
     /**
@@ -239,9 +245,14 @@ class Parallel extends Adapter
      */
     protected static function findAutoloader(): ?string
     {
+        if (self::$cachedAutoloader !== null) {
+            return self::$cachedAutoloader;
+        }
+
         $vendorDir = \getenv('COMPOSER_VENDOR_DIR');
         if ($vendorDir !== false && \file_exists($vendorDir . '/autoload.php')) {
-            return \realpath($vendorDir . '/autoload.php') ?: null;
+            self::$cachedAutoloader = \realpath($vendorDir . '/autoload.php') ?: null;
+            return self::$cachedAutoloader;
         }
 
         $paths = [
@@ -253,7 +264,8 @@ class Parallel extends Adapter
         foreach ($paths as $path) {
             $realPath = \realpath($path);
             if ($realPath !== false && \file_exists($realPath)) {
-                return $realPath;
+                self::$cachedAutoloader = $realPath;
+                return self::$cachedAutoloader;
             }
         }
 
@@ -261,7 +273,8 @@ class Parallel extends Adapter
         if ($cwd !== false) {
             $cwdPath = $cwd . '/vendor/autoload.php';
             if (\file_exists($cwdPath)) {
-                return \realpath($cwdPath) ?: null;
+                self::$cachedAutoloader = \realpath($cwdPath) ?: null;
+                return self::$cachedAutoloader;
             }
         }
 

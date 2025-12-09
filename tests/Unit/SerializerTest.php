@@ -11,8 +11,9 @@ class SerializerTest extends TestCase
     {
         // Test string
         $serialized = Serializer::serialize('hello');
-        $this->assertIsString($serialized);
-        $this->assertEquals('hello', Serializer::unserialize($serialized));
+        $unserialized = Serializer::unserialize($serialized);
+        $this->assertIsString($unserialized);
+        $this->assertEquals('hello', $unserialized);
 
         // Test integer
         $serialized = Serializer::serialize(42);
@@ -42,7 +43,7 @@ class SerializerTest extends TestCase
 
     public function testSerializeClosure(): void
     {
-        $closure = function ($x) {
+        $closure = function (int $x) {
             return $x * 2;
         };
 
@@ -50,6 +51,7 @@ class SerializerTest extends TestCase
         $unserialized = Serializer::unserialize($serialized);
 
         $this->assertInstanceOf(\Closure::class, $unserialized);
+        /** @var \Closure(int): int $unserialized */
         $this->assertEquals(10, $unserialized(5));
     }
 
@@ -57,7 +59,7 @@ class SerializerTest extends TestCase
     {
         $data = [
             'name' => 'test',
-            'callback' => function ($x) {
+            'callback' => function (int $x) {
                 return $x + 1;
             },
             'value' => 100,
@@ -66,6 +68,8 @@ class SerializerTest extends TestCase
         $serialized = Serializer::serialize($data);
         $unserialized = Serializer::unserialize($serialized);
 
+        $this->assertIsArray($unserialized);
+        /** @var array{name: string, value: int, callback: callable(int): int} $unserialized */
         $this->assertEquals('test', $unserialized['name']);
         $this->assertEquals(100, $unserialized['value']);
         $this->assertEquals(6, $unserialized['callback'](5));
@@ -76,7 +80,7 @@ class SerializerTest extends TestCase
         $data = [
             'level1' => [
                 'level2' => [
-                    'callback' => function ($x) {
+                    'callback' => function (int $x) {
                         return $x * $x;
                     },
                 ],
@@ -86,7 +90,10 @@ class SerializerTest extends TestCase
         $serialized = Serializer::serialize($data);
         $unserialized = Serializer::unserialize($serialized);
 
-        $this->assertEquals(25, $unserialized['level1']['level2']['callback'](5));
+        $this->assertIsArray($unserialized);
+        /** @var array{level1: array{level2: array{callback: callable(int): int}}} $unserialized */
+        $callback = $unserialized['level1']['level2']['callback'];
+        $this->assertEquals(25, $callback(5));
     }
 
     public function testSerializeObject(): void
@@ -98,6 +105,7 @@ class SerializerTest extends TestCase
         $serialized = Serializer::serialize($obj);
         $unserialized = Serializer::unserialize($serialized, ['allowed_classes' => true]);
 
+        $this->assertInstanceOf(\stdClass::class, $unserialized);
         $this->assertEquals('test', $unserialized->name);
         $this->assertEquals(42, $unserialized->value);
     }
@@ -106,15 +114,19 @@ class SerializerTest extends TestCase
     {
         $obj = new \stdClass();
         $obj->name = 'test';
-        $obj->callback = function ($x) {
+        $obj->callback = function (int $x) {
             return $x * 3;
         };
 
         $serialized = Serializer::serialize($obj);
         $unserialized = Serializer::unserialize($serialized, ['allowed_classes' => true]);
 
+        $this->assertInstanceOf(\stdClass::class, $unserialized);
+        /** @var \stdClass&object{name: string, callback: callable} $unserialized */
         $this->assertEquals('test', $unserialized->name);
-        $this->assertEquals(15, ($unserialized->callback)(5));
+        /** @var callable(int): int $callback */
+        $callback = $unserialized->callback;
+        $this->assertEquals(15, $callback(5));
     }
 
     public function testUnserializeEmptyData(): void
@@ -174,7 +186,9 @@ class SerializerTest extends TestCase
         $serialized = Serializer::serialize($data);
         $unserialized = Serializer::unserialize($serialized);
 
+        $this->assertIsArray($unserialized);
         // Closure should be found and properly serialized
+        /** @var array{level0: array{level1: array{level2: array{level3: array{level4: array{level5: array{level6: array{level7: array{level8: callable}}}}}}}}} $unserialized */
         $this->assertEquals('found', $unserialized['level0']['level1']['level2']['level3']['level4']['level5']['level6']['level7']['level8']());
     }
 
@@ -191,6 +205,8 @@ class SerializerTest extends TestCase
         $serialized = Serializer::serialize($data);
         $unserialized = Serializer::unserialize($serialized);
 
+        $this->assertIsArray($unserialized);
+        /** @var array{a: array{b: array{c: array{d: array{e: array{f: array{g: array{h: array{i: array{j: array{k: string}}}}}}}}}}} $unserialized */
         $this->assertEquals('deep_value', $unserialized['a']['b']['c']['d']['e']['f']['g']['h']['i']['j']['k']);
     }
 

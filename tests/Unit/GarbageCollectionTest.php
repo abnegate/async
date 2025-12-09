@@ -4,7 +4,7 @@ namespace Utopia\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Async\GarbageCollection;
-use Utopia\Async\Parallel\Constants;
+use Utopia\Async\Parallel\Configuration;
 
 /**
  * Test class that uses the GarbageCollection trait
@@ -38,7 +38,7 @@ class GarbageCollectionTest extends TestCase
         // Should not throw any exceptions
         $instance->exposeTriggerGC();
 
-        $this->assertTrue(true);
+        $this->expectNotToPerformAssertions();
     }
 
     public function testTriggerGCCanBeCalledMultipleTimes(): void
@@ -50,13 +50,13 @@ class GarbageCollectionTest extends TestCase
             $instance->exposeTriggerGC();
         }
 
-        $this->assertTrue(true);
+        $this->expectNotToPerformAssertions();
     }
 
     public function testMemoryThresholdConstantIsUsed(): void
     {
-        // Verify the constant exists and has expected value (50MB)
-        $this->assertEquals(52428800, Constants::MEMORY_THRESHOLD_FOR_GC);
+        // Verify the configuration value exists and has expected value (50MB)
+        $this->assertEquals(52428800, Configuration::getMemoryThresholdForGc());
     }
 
     public function testTraitHasPrivateMethod(): void

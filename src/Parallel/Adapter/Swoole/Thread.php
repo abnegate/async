@@ -69,7 +69,7 @@ class Thread extends Adapter
             $errors = $pool->getLastErrors();
             if (isset($errors[0])) {
                 $errorInfo = $errors[0];
-                $message = $errorInfo['message'] ?? 'Task execution failed';
+                $message = $errorInfo['message'];
                 throw new \Exception($message);
             }
         }

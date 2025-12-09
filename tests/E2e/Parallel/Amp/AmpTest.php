@@ -4,7 +4,7 @@ namespace Utopia\Tests\E2e\Parallel\Amp;
 
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
-use Utopia\Async\Parallel\Adapter\Amp;
+use Utopia\Async\Parallel\Adapter\AMPHP as Amp;
 
 #[Group('amp-parallel')]
 class AmpTest extends TestCase
@@ -32,7 +32,7 @@ class AmpTest extends TestCase
 
     public function testRunWithArguments(): void
     {
-        $result = Amp::run(function ($a, $b) {
+        $result = Amp::run(function (int $a, int $b) {
             return $a + $b;
         }, 5, 3);
 
@@ -70,7 +70,7 @@ class AmpTest extends TestCase
     {
         $items = [1, 2, 3, 4, 5];
 
-        $results = Amp::map($items, function ($item) {
+        $results = Amp::map($items, function (int $item) {
             return $item * 2;
         });
 
@@ -79,7 +79,7 @@ class AmpTest extends TestCase
 
     public function testMapWithEmptyArray(): void
     {
-        $results = Amp::map([], function ($item) {
+        $results = Amp::map([], function (int $item) {
             return $item * 2;
         });
 
@@ -90,7 +90,7 @@ class AmpTest extends TestCase
     {
         $items = range(1, 10);
 
-        $results = Amp::map($items, function ($item) {
+        $results = Amp::map($items, function (int $item) {
             return $item * 3;
         }, 2);
 
@@ -106,7 +106,7 @@ class AmpTest extends TestCase
     {
         $items = ['a', 'b', 'c'];
 
-        $results = Amp::map($items, function ($item, $index) {
+        $results = Amp::map($items, function (string $item, int $index) {
             return $index . ':' . $item;
         });
 
@@ -126,6 +126,7 @@ class AmpTest extends TestCase
             };
         }
 
+        /** @var array<int, mixed> $results */
         $results = Amp::pool($tasks, 3);
 
         $this->assertCount(10, $results);
@@ -221,6 +222,7 @@ class AmpTest extends TestCase
         }
 
         $start = microtime(true);
+        /** @var array<int, array{index: int, sum: int}> $results */
         $results = Amp::all($tasks);
         $parallelTime = microtime(true) - $start;
 

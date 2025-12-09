@@ -12,11 +12,10 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
+use Utopia\Async\Parallel\Adapter\Parallel;
+use Utopia\Async\Parallel\Adapter\React;
 use Utopia\Async\Parallel\Adapter\Swoole\Process as SwooleProcess;
 use Utopia\Async\Parallel\Adapter\Swoole\Thread as SwooleThread;
-use Utopia\Async\Parallel\Adapter\Amp;
-use Utopia\Async\Parallel\Adapter\React;
-use Utopia\Async\Parallel\Adapter\Parallel;
 use Utopia\Async\Parallel\Adapter\Sync;
 
 // Parse iterations from command line
@@ -37,7 +36,7 @@ $allAdapters = [
     'Sync' => Sync::class,
     'Swoole Thread' => SwooleThread::class,
     'Swoole Process' => SwooleProcess::class,
-    'Amp' => Amp::class,
+    'AMPHP' => Amp::class,
     'React' => React::class,
     'ext-parallel' => Parallel::class,
 ];

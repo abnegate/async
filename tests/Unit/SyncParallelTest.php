@@ -18,7 +18,7 @@ class SyncParallelTest extends TestCase
 
     public function testRunWithArguments(): void
     {
-        $result = Sync::run(function ($a, $b, $c) {
+        $result = Sync::run(function (int $a, int $b, int $c): int {
             return $a + $b + $c;
         }, 1, 2, 3);
 
@@ -45,6 +45,7 @@ class SyncParallelTest extends TestCase
             $obj->value = 'test';
             return $obj;
         });
+        $this->assertInstanceOf(\stdClass::class, $result);
         $this->assertEquals('test', $result->value);
 
         // Null
@@ -93,7 +94,7 @@ class SyncParallelTest extends TestCase
     {
         $items = [1, 2, 3, 4, 5];
 
-        $results = Sync::map($items, function ($item) {
+        $results = Sync::map($items, function (int $item): int {
             return $item * 2;
         });
 
@@ -104,7 +105,7 @@ class SyncParallelTest extends TestCase
     {
         $items = ['a', 'b', 'c'];
 
-        $results = Sync::map($items, function ($item, $index) {
+        $results = Sync::map($items, function (string $item, int $index): string {
             return "{$index}:{$item}";
         });
 
@@ -123,7 +124,7 @@ class SyncParallelTest extends TestCase
         $items = [1, 2, 3];
 
         // Worker count is ignored in Sync adapter, but shouldn't cause errors
-        $results = Sync::map($items, fn ($item) => $item * 10, 4);
+        $results = Sync::map($items, fn (int $item): int => $item * 10, 4);
 
         $this->assertEquals([10, 20, 30], $results);
     }
@@ -132,7 +133,7 @@ class SyncParallelTest extends TestCase
     {
         $items = [1, 2, 3];
 
-        $results = Sync::map($items, fn ($item) => $item + 1, null);
+        $results = Sync::map($items, fn (int $item): int => $item + 1, null);
 
         $this->assertEquals([2, 3, 4], $results);
     }
@@ -142,7 +143,7 @@ class SyncParallelTest extends TestCase
         $items = [1, 2, 3];
         $collected = [];
 
-        Sync::forEach($items, function ($item) use (&$collected) {
+        Sync::forEach($items, function (int $item) use (&$collected): void {
             $collected[] = $item * 2;
         });
 
@@ -154,7 +155,7 @@ class SyncParallelTest extends TestCase
         $items = ['a', 'b', 'c'];
         $collected = [];
 
-        Sync::forEach($items, function ($item, $index) use (&$collected) {
+        Sync::forEach($items, function (string $item, int $index) use (&$collected): void {
             $collected[] = "{$index}:{$item}";
         });
 

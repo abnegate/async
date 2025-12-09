@@ -12,21 +12,21 @@
   ],
   "require": {
     "php": ">=8.1",
-    "ext-sockets": "*",
     "opis/closure": "4.*"
   },
   "require-dev": {
-    "amphp/amp": "^3.0",
-    "amphp/parallel": "^2.0",
+    "amphp/amp": "3.*",
+    "amphp/parallel": "2.*",
     "laravel/pint": "1.*",
-    "phpstan/phpstan": "1.*",
+    "phpstan/phpstan": "2.*",
     "phpunit/phpunit": "11.*",
-    "react/child-process": "^0.6",
-    "react/event-loop": "^1.5",
+    "react/child-process": "0.*",
+    "react/event-loop": "1.*",
     "swoole/ide-helper": "*"
   },
   "suggest": {
     "ext-swoole": "Required for Swoole Thread and Process adapters (recommended for best performance)",
+    "ext-sockets": "Required for Swoole Process adapter",
     "ext-parallel": "Required for parallel adapter (requires PHP ZTS build)",
     "amphp/amp": "Required for Amp promise adapter",
     "amphp/parallel": "Required for Amp parallel adapter",
@@ -44,10 +44,10 @@
     }
   },
   "scripts": {
-    "test": "phpunit",
-    "lint": "pint",
-    "format": "php -d memory_limit=4G ./vendor/bin/pint",
-    "check": "./vendor/bin/phpstan analyse --level max --memory-limit 4G",
+    "test": "vendor/bin/phpunit",
+    "lint": "vendor/bin/pint",
+    "format": "php -d memory_limit=4G vendor/bin/pint",
+    "check": "vendor/bin/phpstan analyse src tests --level=max --memory-limit=4G",
     "analyse": "phpstan analyse"
   },
   "config": {

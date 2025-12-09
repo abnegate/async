@@ -4,7 +4,7 @@ namespace Utopia\Async;
 
 use Utopia\Async\Exception\Adapter as AdapterException;
 use Utopia\Async\Parallel\Adapter;
-use Utopia\Async\Parallel\Adapter\Amp as AmpAdapter;
+use Utopia\Async\Parallel\Adapter\AMPHP as AmpAdapter;
 use Utopia\Async\Parallel\Adapter\Parallel as ParallelAdapter;
 use Utopia\Async\Parallel\Adapter\React as ReactAdapter;
 use Utopia\Async\Parallel\Adapter\Swoole\Process as SwooleProcessAdapter;
@@ -58,7 +58,7 @@ class Parallel
      * 2. ext-parallel (requires PHP with ZTS and ext-parallel)
      * 3. Swoole Process (requires Swoole extension)
      * 4. ReactPHP (requires react/child-process and react/event-loop)
-     * 5. Amp (requires amphp/parallel)
+     * 5. AMPHP (requires amphp/parallel)
      * 6. Sync (always available, sequential fallback)
      *
      * @return string
@@ -126,7 +126,9 @@ class Parallel
      */
     public static function all(array $tasks): array
     {
-        return static::getAdapter()::all($tasks);
+        /** @var array<mixed> $result */
+        $result = static::getAdapter()::all($tasks);
+        return $result;
     }
 
     /**
@@ -143,7 +145,9 @@ class Parallel
      */
     public static function map(array $items, callable $callback, ?int $workers = null): array
     {
-        return static::getAdapter()::map($items, $callback, $workers);
+        /** @var array<mixed> $result */
+        $result = static::getAdapter()::map($items, $callback, $workers);
+        return $result;
     }
 
     /**
@@ -180,7 +184,9 @@ class Parallel
      */
     public static function pool(array $tasks, int $maxConcurrency): array
     {
-        return static::getAdapter()::pool($tasks, $maxConcurrency);
+        /** @var array<mixed> $result */
+        $result = static::getAdapter()::pool($tasks, $maxConcurrency);
+        return $result;
     }
 
     /**
@@ -192,7 +198,9 @@ class Parallel
      */
     public static function createPool(int $workers): ThreadPool|ProcessPool
     {
-        return static::getAdapter()::createPool($workers);
+        /** @var ThreadPool|ProcessPool $pool */
+        $pool = static::getAdapter()::createPool($workers);
+        return $pool;
     }
 
     /**
