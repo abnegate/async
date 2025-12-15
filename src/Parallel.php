@@ -4,7 +4,7 @@ namespace Utopia\Async;
 
 use Utopia\Async\Exception\Adapter as AdapterException;
 use Utopia\Async\Parallel\Adapter;
-use Utopia\Async\Parallel\Adapter\AMPHP as AmpAdapter;
+use Utopia\Async\Parallel\Adapter\Amp as AmpAdapter;
 use Utopia\Async\Parallel\Adapter\Parallel as ParallelAdapter;
 use Utopia\Async\Parallel\Adapter\React as ReactAdapter;
 use Utopia\Async\Parallel\Adapter\Swoole\Process as SwooleProcessAdapter;
@@ -58,7 +58,7 @@ class Parallel
      * 2. ext-parallel (requires PHP with ZTS and ext-parallel)
      * 3. Swoole Process (requires Swoole extension)
      * 4. ReactPHP (requires react/child-process and react/event-loop)
-     * 5. AMPHP (requires amphp/parallel)
+     * 5. Amp (requires amphp/parallel)
      * 6. Sync (always available, sequential fallback)
      *
      * @return string

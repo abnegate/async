@@ -171,7 +171,6 @@ class React extends Adapter
      */
     protected static function executeInProcesses(array $tasks, int $maxConcurrency, array $defaultArgs = []): array
     {
-        // Use a fresh event loop for each execution to avoid state issues
         $loop = new StreamSelectLoop();
 
         $results = [];
@@ -302,11 +301,21 @@ class React extends Adapter
      */
     protected static function getWorkerScript(): string
     {
+        // Return cached path if already set and file exists
         if (self::$workerScript !== null && \file_exists(self::$workerScript)) {
             return self::$workerScript;
         }
 
-        // Create a temporary worker script
+        self::$workerScript = __DIR__ . '/../Worker/react_worker.php';
+        if (\file_exists(self::$workerScript)) {
+            return self::$workerScript;
+        }
+
+        $dir = \dirname(self::$workerScript);
+        if (!\is_dir($dir)) {
+            \mkdir($dir, 0755, true);
+        }
+
         $script = <<<'PHP'
 <?php
 // ReactPHP worker script
@@ -383,14 +392,9 @@ try {
 }
 PHP;
 
-        self::$workerScript = __DIR__ . '/../Worker/react_worker.php';
-
-        $dir = \dirname(self::$workerScript);
-        if (!\is_dir($dir)) {
-            \mkdir($dir, 0755, true);
-        }
-
-        \file_put_contents(self::$workerScript, $script);
+        $tempFile = self::$workerScript . '.' . \uniqid('tmp', true);
+        \file_put_contents($tempFile, $script);
+        \rename($tempFile, self::$workerScript);
 
         return self::$workerScript;
     }

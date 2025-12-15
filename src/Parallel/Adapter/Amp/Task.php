@@ -1,13 +1,13 @@
 <?php
 
-namespace Utopia\Async\Parallel\Adapter\AMPHP;
+namespace Utopia\Async\Parallel\Adapter\Amp;
 
 use Amp\Cancellation;
 use Amp\Parallel\Worker\Task as AMPHPTask;
 use Amp\Sync\Channel;
 
 /**
- * Task implementation for AMPHP parallel worker execution.
+ * Task implementation for Amp parallel worker execution.
  *
  * @implements AMPHPTask<mixed, never, never>
  * @package Utopia\Async\Parallel\Adapter

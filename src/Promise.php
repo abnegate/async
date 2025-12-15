@@ -49,7 +49,7 @@ class Promise
      * Auto-detects the best available adapter with the following priority:
      * 1. Swoole Coroutine (requires Swoole extension)
      * 2. ReactPHP (requires react/event-loop)
-     * 3. AMPHP (requires amphp/amp and revolt/event-loop)
+     * 3. Amp (requires amphp/amp and revolt/event-loop)
      * 4. Sync (always available, synchronous fallback)
      *
      * @return class-string<Adapter>

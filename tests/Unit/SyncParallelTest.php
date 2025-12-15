@@ -313,4 +313,93 @@ class SyncParallelTest extends TestCase
         $this->assertEquals(['task1', 'task2', 'task3'], $executionOrder);
         $this->assertEquals([1, 2, 3], $results);
     }
+
+    /**
+     * Test that map preserves associative array keys.
+     * This is a regression test for the key preservation fix.
+     */
+    public function testMapPreservesAssociativeKeys(): void
+    {
+        $items = [
+            'first' => 1,
+            'second' => 2,
+            'third' => 3,
+        ];
+
+        $results = Sync::map($items, fn (int $item) => $item * 10);
+
+        // Keys should be preserved
+        $this->assertArrayHasKey('first', $results);
+        $this->assertArrayHasKey('second', $results);
+        $this->assertArrayHasKey('third', $results);
+
+        $this->assertEquals(10, $results['first']);
+        $this->assertEquals(20, $results['second']);
+        $this->assertEquals(30, $results['third']);
+    }
+
+    /**
+     * Test that map preserves string keys with index callback.
+     */
+    public function testMapPreservesStringKeysWithIndex(): void
+    {
+        $items = [
+            'a' => 'apple',
+            'b' => 'banana',
+            'c' => 'cherry',
+        ];
+
+        $results = Sync::map($items, function (string $item, string $key) {
+            return "{$key}:{$item}";
+        });
+
+        $this->assertEquals('a:apple', $results['a']);
+        $this->assertEquals('b:banana', $results['b']);
+        $this->assertEquals('c:cherry', $results['c']);
+    }
+
+    /**
+     * Test that map preserves numeric but non-sequential keys.
+     */
+    public function testMapPreservesNonSequentialNumericKeys(): void
+    {
+        $items = [
+            10 => 'ten',
+            20 => 'twenty',
+            30 => 'thirty',
+        ];
+
+        $results = Sync::map($items, fn (string $item) => strtoupper($item));
+
+        $this->assertArrayHasKey(10, $results);
+        $this->assertArrayHasKey(20, $results);
+        $this->assertArrayHasKey(30, $results);
+
+        $this->assertEquals('TEN', $results[10]);
+        $this->assertEquals('TWENTY', $results[20]);
+        $this->assertEquals('THIRTY', $results[30]);
+    }
+
+    /**
+     * Test that forEach receives correct keys for associative arrays.
+     */
+    public function testForEachReceivesAssociativeKeys(): void
+    {
+        $items = [
+            'x' => 100,
+            'y' => 200,
+            'z' => 300,
+        ];
+
+        $receivedKeys = [];
+        $receivedValues = [];
+
+        Sync::forEach($items, function ($value, $key) use (&$receivedKeys, &$receivedValues) {
+            $receivedKeys[] = $key;
+            $receivedValues[] = $value;
+        });
+
+        $this->assertEquals(['x', 'y', 'z'], $receivedKeys);
+        $this->assertEquals([100, 200, 300], $receivedValues);
+    }
 }

@@ -73,7 +73,7 @@ jobs:
         adapter:
           - Sync
           - Swoole/Coroutine
-          - AMPHP/AMPHP
+          - Amp/Amp
           - React/React
 
     steps:
@@ -106,7 +106,7 @@ jobs:
         adapter:
           - Swoole/Process
           - Swoole/Thread
-          - AMPHP/AMPHP
+          - Amp/Amp
           - React/React
           - Parallel/Parallel
 

@@ -66,7 +66,7 @@ class Process
                         continue;
                     }
 
-                    if ($message === 'STOP') {
+                    if (\is_string($message) && \str_contains($message, 'STOP')) {
                         break;
                     }
 
@@ -105,7 +105,7 @@ class Process
 
                     $worker->write($response);
                 }
-            }, false, SOCK_DGRAM, false);
+            }, false, SOCK_STREAM, true);
 
             $worker->start();
 
@@ -138,13 +138,13 @@ class Process
         $taskIndexMap = \array_keys($tasks);
         $taskCount = \count($tasks);
         $results = [];
-        $taskQueue = \range(0, $taskCount - 1);
+        $nextTaskIndex = 0; // Track next task to assign (O(1) instead of array_shift)
         $activeWorkers = [];
 
         // Distribute initial tasks to workers
         foreach ($this->workers as $workerId => $worker) {
-            if (!empty($taskQueue)) {
-                $taskIndex = \array_shift($taskQueue);
+            if ($nextTaskIndex < $taskCount) {
+                $taskIndex = $nextTaskIndex++;
                 $task = $taskList[$taskIndex];
 
                 // Serialize closure with Opis\Closure, then wrap in native serialize
@@ -162,17 +162,23 @@ class Process
         $lastProgressTime = $startTime;
         $lastCompleted = 0;
 
+        $deadlockInterval = Configuration::getDeadlockDetectionInterval();
+        $maxTimeout = Configuration::getMaxTaskTimeoutSeconds();
+        $workerSleepUs = Configuration::getWorkerSleepDurationUs();
+        $workerSleepSeconds = $workerSleepUs / 1000000; // Pre-compute division
+        $isInCoroutine = SwooleCoroutine::getCid() > 0; // Cache coroutine context check
+
         // Use polling approach - Swoole 6.x handles non-blocking internally
         while ($completed < $taskCount) {
             $currentTime = \time();
 
             // Deadlock detection: check if we've made progress
-            if ($currentTime - $lastProgressTime > Configuration::getDeadlockDetectionInterval()) {
+            if ($currentTime - $lastProgressTime > $deadlockInterval) {
                 if ($completed === $lastCompleted) {
                     throw new \RuntimeException(
                         \sprintf(
                             'Potential deadlock detected: no progress for %d seconds. Completed %d/%d tasks.',
-                            Configuration::getDeadlockDetectionInterval(),
+                            $deadlockInterval,
                             $completed,
                             $taskCount
                         )
@@ -183,11 +189,11 @@ class Process
             }
 
             // Global timeout check
-            if ($currentTime - $startTime > Configuration::getMaxTaskTimeoutSeconds()) {
+            if ($currentTime - $startTime > $maxTimeout) {
                 throw new \RuntimeException(
                     \sprintf(
                         'Task execution timeout: exceeded %d seconds. Completed %d/%d tasks.',
-                        Configuration::getMaxTaskTimeoutSeconds(),
+                        $maxTimeout,
                         $completed,
                         $taskCount
                     )
@@ -230,8 +236,8 @@ class Process
 
                 $this->triggerGC();
 
-                if (!empty($taskQueue)) {
-                    $taskIndex = \array_shift($taskQueue);
+                if ($nextTaskIndex < $taskCount) {
+                    $taskIndex = $nextTaskIndex++;
                     $task = $taskList[$taskIndex];
 
                     // Serialize closure with Opis\Closure, then wrap in native serialize
@@ -246,11 +252,11 @@ class Process
             }
 
             if (!empty($activeWorkers)) {
-                // Use non-blocking sleep when in coroutine context
-                if (SwooleCoroutine::getCid() > 0) {
-                    SwooleCoroutine::sleep(Configuration::getWorkerSleepDurationUs() / 1000000);
+                // Use non-blocking sleep when in coroutine context (cached check)
+                if ($isInCoroutine) {
+                    SwooleCoroutine::sleep($workerSleepSeconds);
                 } else {
-                    \usleep(Configuration::getWorkerSleepDurationUs());
+                    \usleep($workerSleepUs);
                 }
             }
         }

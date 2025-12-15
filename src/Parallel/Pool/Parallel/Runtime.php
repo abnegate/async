@@ -138,19 +138,25 @@ class Runtime
         $pendingTaskIndex = 0; // Track current position in queue instead of shifting
         $runningCount = 0;
 
+        $closures = [];
+        foreach ($taskQueue as $index => $taskData) {
+            $task = $taskData['task'];
+            /** @var callable $task */
+            $closures[$index] = $task instanceof \Closure ? $task : \Closure::fromCallable($task);
+        }
+
         // Start initial batch up to pool size
         while ($runningCount < $this->workerCount && $pendingTaskIndex < \count($taskQueue)) {
             /** @var array{index: int|string, task: callable, args: array<mixed>} $taskData */
-            $taskData = $taskQueue[$pendingTaskIndex++];
+            $taskData = $taskQueue[$pendingTaskIndex];
 
             $runtime = $this->acquireRuntime();
             if ($runtime === null) {
-                $pendingTaskIndex--;
                 break;
             }
 
-            $task = $taskData['task'];
-            $closure = $task instanceof \Closure ? $task : \Closure::fromCallable($task);
+            $closure = $closures[$pendingTaskIndex];
+            $pendingTaskIndex++;
 
             /** @var \parallel\Future $future */
             if (!empty($taskData['args'])) {
@@ -189,9 +195,8 @@ class Runtime
                         $taskData = $taskQueue[$pendingTaskIndex];
                         $runtime = $this->acquireRuntime();
                         if ($runtime !== null) {
+                            $closure = $closures[$pendingTaskIndex];
                             $pendingTaskIndex++;
-                            $task = $taskData['task'];
-                            $closure = $task instanceof \Closure ? $task : \Closure::fromCallable($task);
 
                             /** @var \parallel\Future $newFuture */
                             if (!empty($taskData['args'])) {

@@ -56,7 +56,6 @@ class Thread extends Adapter
     {
         static::checkThreadSupport();
 
-        // Wrap task with arguments
         $wrappedTask = function () use ($task, $args) {
             return $task(...$args);
         };
@@ -64,7 +63,6 @@ class Thread extends Adapter
         $pool = static::getPool();
         $results = $pool->execute([$wrappedTask]);
 
-        // For single task execution, re-throw any exception
         if ($pool->hasErrors()) {
             $errors = $pool->getLastErrors();
             if (isset($errors[0])) {

@@ -7,7 +7,7 @@ use Utopia\Async\Exception\Promise;
 use Utopia\Async\Promise\Adapter;
 
 /**
- * AMPHP Promise Adapter.
+ * Amp Promise Adapter.
  *
  * Concurrent execution using amphp/amp event loop and fibers.
  * This provides single-threaded concurrency for async I/O operations.
@@ -20,7 +20,7 @@ use Utopia\Async\Promise\Adapter;
 class Amp extends Adapter
 {
     /**
-     * Whether AMPHP support has been verified
+     * Whether Amp support has been verified
      */
     private static bool $supportVerified = false;
 
@@ -31,7 +31,7 @@ class Amp extends Adapter
     }
 
     /**
-     * Execute the promise using AMPHP's event loop.
+     * Execute the promise using Amp's event loop.
      *
      * @param callable $executor
      * @param callable $resolve
@@ -43,7 +43,7 @@ class Amp extends Adapter
         callable $resolve,
         callable $reject
     ): void {
-        // Use AMPHP's async to run in the event loop
+        // Use Amp's async to run in the event loop
         \Revolt\EventLoop::queue(function () use ($executor, $resolve, $reject) {
             try {
                 $executor($resolve, $reject);
@@ -54,7 +54,7 @@ class Amp extends Adapter
     }
 
     /**
-     * Sleep using AMPHP's event loop delay.
+     * Sleep using Amp's event loop delay.
      *
      * @return void
      */
@@ -109,7 +109,6 @@ class Amp extends Adapter
                         $results[$key] = $value;
                         $remaining--;
                         if ($remaining === 0) {
-                            \ksort($results);
                             $resolve($results);
                         }
                         return $value;
@@ -183,7 +182,6 @@ class Amp extends Adapter
                         $results[$key] = ['status' => 'fulfilled', 'value' => $value];
                         $remaining--;
                         if ($remaining === 0) {
-                            \ksort($results);
                             $resolve($results);
                         }
                         return $value;
@@ -192,7 +190,6 @@ class Amp extends Adapter
                         $results[$key] = ['status' => 'rejected', 'reason' => $err];
                         $remaining--;
                         if ($remaining === 0) {
-                            \ksort($results);
                             $resolve($results);
                         }
                     }
@@ -247,9 +244,9 @@ class Amp extends Adapter
     }
 
     /**
-     * Check if AMPHP support is available.
+     * Check if Amp support is available.
      *
-     * @return bool True if AMPHP support is available
+     * @return bool True if Amp support is available
      */
     public static function isSupported(): bool
     {
@@ -257,10 +254,10 @@ class Amp extends Adapter
     }
 
     /**
-     * Check if AMPHP support is available.
+     * Check if Amp support is available.
      *
      * @return void
-     * @throws AdapterException If AMPHP support is not available
+     * @throws AdapterException If Amp support is not available
      */
     protected static function checkSupport(): void
     {
@@ -270,7 +267,7 @@ class Amp extends Adapter
 
         if (!\function_exists('Amp\async')) {
             throw new AdapterException(
-                'AMPHP is not available. Please install amphp/amp: composer require amphp/amp'
+                'Amp is not available. Please install amphp/amp: composer require amphp/amp'
             );
         }
 

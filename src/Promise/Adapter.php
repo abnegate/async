@@ -279,13 +279,8 @@ abstract class Adapter
      */
     private function waitWithBackoff(): void
     {
-        $sleepDuration = Configuration::getSleepDurationUs();
-
         while ($this->isPending()) {
             $this->sleep();
-
-            // Exponential backoff: double sleep duration up to maximum
-            $sleepDuration = \min($sleepDuration * 2, Configuration::getMaxSleepDurationUs());
         }
     }
 

@@ -170,7 +170,7 @@ class Thread
         $this->lastErrors = [];
         $this->gcCheckCounter = 0;
         $this->completionCounter->set(0);
-        $this->batchId = \uniqid('batch_', true);
+        $this->batchId = \sprintf('b%d%04x', \time(), \random_int(0, 0xffff));
 
         $taskIndexMap = \array_keys($tasks);
         $taskCount = \count($tasks);

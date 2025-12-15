@@ -35,7 +35,7 @@ $allAdapters = [
     'Sync' => Sync::class,
     'Swoole Thread' => SwooleThread::class,
     'Swoole Process' => SwooleProcess::class,
-    'AMPHP' => Amp::class,
+    'Amp' => Amp::class,
     'React' => React::class,
     'ext-parallel' => Parallel::class,
 ];

@@ -42,7 +42,7 @@ class Sync extends Adapter
     {
         $results = [];
         foreach ($items as $index => $item) {
-            $results[] = $callback($item, $index);
+            $results[$index] = $callback($item, $index);
         }
         return $results;
     }
