@@ -64,15 +64,36 @@ jobs:
           docker compose up -d
           sleep 10
 
-      - name: Run Quick Benchmark
-        id: benchmark
+      - name: Run Swoole Benchmark
+        id: benchmark-swoole
+        timeout-minutes: 30
         run: |
-          echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
+          echo "### Swoole Adapters" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          docker compose exec -T tests php /usr/src/code/benchmarks/QuickBenchmark.php --iterations=20 2>&1 | tee benchmark_swoole.txt
+          cat benchmark_swoole.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run ext-parallel Benchmark
+        id: benchmark-parallel
+        timeout-minutes: 30
+        run: |
+          echo "### ext-parallel Adapter" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          docker compose exec -T tests php /usr/src/code/benchmarks/QuickBenchmark.php --iterations=20 2>&1 | tee benchmark_output.txt
-          cat benchmark_output.txt >> $GITHUB_STEP_SUMMARY
+          docker compose exec -T tests php -n -d extension=parallel.so -d extension=sockets.so /usr/src/code/benchmarks/QuickBenchmark.php --iterations=20 2>&1 | tee benchmark_parallel.txt
+          cat benchmark_parallel.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Combine Results
+        run: |
+          echo "## Benchmark Results" > benchmark_output.txt
+          echo "" >> benchmark_output.txt
+          echo "### Swoole Adapters" >> benchmark_output.txt
+          cat benchmark_swoole.txt >> benchmark_output.txt
+          echo "" >> benchmark_output.txt
+          echo "### ext-parallel Adapter" >> benchmark_output.txt
+          cat benchmark_parallel.txt >> benchmark_output.txt
 
       - name: Post Benchmark Results as Comment
         continue-on-error: true
@@ -80,15 +101,25 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const output = fs.readFileSync('benchmark_output.txt', 'utf8');
+            const swooleOutput = fs.readFileSync('benchmark_swoole.txt', 'utf8');
+            const parallelOutput = fs.readFileSync('benchmark_parallel.txt', 'utf8');
 
             const body = `## Benchmark Results
 
             <details>
-            <summary>Click to expand benchmark output</summary>
+            <summary>Swoole Adapters (Sync, Swoole Thread, Swoole Process, Amp, React)</summary>
 
             \`\`\`
-            ${output}
+            ${swooleOutput}
+            \`\`\`
+
+            </details>
+
+            <details>
+            <summary>ext-parallel Adapter (Sync, Amp, React, ext-parallel)</summary>
+
+            \`\`\`
+            ${parallelOutput}
             \`\`\`
 
             </details>
