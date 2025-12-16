@@ -108,12 +108,12 @@ abstract class Adapter
                 if ($cpuInfo !== false) {
                     $countTab = \substr_count($cpuInfo, 'processor\t:');
                     $countSpace = \substr_count($cpuInfo, 'processor :');
-                    $count = \max($countTab, $countSpace);
+                    $count = \max($countTab, $countSpace, 1);
                 }
             }
 
-            // Fall back to system commands if /proc/cpuinfo not available
-            if ($count === 1) {
+            // Fall back to system commands if /proc/cpuinfo detection failed
+            if ($count <= 1) {
                 if (PHP_OS_FAMILY === 'Windows') {
                     $process = @popen('wmic cpu get NumberOfCores', 'rb');
                     if ($process !== false) {

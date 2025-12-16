@@ -12,11 +12,10 @@ RUN composer install \
     --no-scripts \
     --prefer-dist
 
-# Use Debian-based image for better ext-parallel compatibility
-# Alpine (musl libc) has known issues with ext-parallel threading
 FROM php:8.4-zts-bookworm AS compile
 
 ENV PHP_SWOOLE_VERSION="v6.1.3"
+ENV PHP_PARALLEL_VERSION="v1.2.8"
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
@@ -44,8 +43,7 @@ RUN \
 ## ext-parallel Extension (for ZTS builds)
 FROM compile AS parallel
 
-# Build from source for better PHP 8.4 compatibility
-RUN git clone --depth 1 https://github.com/krakjoe/parallel.git && \
+RUN git clone --depth 1 --branch $PHP_PARALLEL_VERSION https://github.com/krakjoe/parallel.git && \
     cd parallel && \
     phpize && \
     ./configure && \

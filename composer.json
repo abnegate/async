@@ -45,7 +45,23 @@
     }
   },
   "scripts": {
-    "test": "vendor/bin/phpunit",
+    "test-unit": "vendor/bin/phpunit tests/Unit --exclude-group no-swoole",
+    "test-promise-sync": "vendor/bin/phpunit tests/E2e/Promise/SyncTest.php",
+    "test-promise-swoole": "vendor/bin/phpunit tests/E2e/Promise/Swoole",
+    "test-promise-amp": "vendor/bin/phpunit tests/E2e/Promise/Amp",
+    "test-promise-react": "vendor/bin/phpunit tests/E2e/Promise/React",
+    "test-parallel-sync": "vendor/bin/phpunit tests/E2e/Parallel/Sync",
+    "test-parallel-swoole-thread": "vendor/bin/phpunit tests/E2e/Parallel/Swoole/ThreadTest.php",
+    "test-parallel-swoole-process": "vendor/bin/phpunit tests/E2e/Parallel/Swoole/ProcessTest.php",
+    "test-parallel-amp": "vendor/bin/phpunit tests/E2e/Parallel/Amp",
+    "test-parallel-react": "vendor/bin/phpunit tests/E2e/Parallel/React",
+    "test-parallel-ext": "php -n -d extension=parallel.so -d extension=sockets.so vendor/bin/phpunit tests/E2e/Parallel/Parallel",
+    "test-e2e": "vendor/bin/phpunit tests/E2e --exclude-group ext-parallel",
+    "test": [
+      "@test-unit",
+      "@test-e2e",
+      "@test-parallel-ext"
+    ],
     "lint": "vendor/bin/pint",
     "format": "php -d memory_limit=4G vendor/bin/pint",
     "check": "vendor/bin/phpstan analyse src tests --level=max --memory-limit=4G",

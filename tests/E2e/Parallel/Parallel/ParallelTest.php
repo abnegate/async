@@ -15,8 +15,8 @@ class ParallelTest extends TestCase
             $this->markTestSkipped('ext-parallel is not available (requires PHP ZTS build)');
         }
 
-        if (\php_uname('m') === 'aarch64' || \php_uname('m') === 'arm64') {
-            $this->markTestSkipped('ext-parallel segfaults on ARM64 due to upstream bug');
+        if (\extension_loaded('swoole')) {
+            $this->markTestSkipped('ext-parallel is incompatible with Swoole extension');
         }
     }
 
