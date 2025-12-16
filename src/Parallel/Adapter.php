@@ -172,7 +172,11 @@ abstract class Adapter
         return function (array $chunk, callable $callback): array {
             $results = [];
             foreach ($chunk as $index => $item) {
-                $results[$index] = $callback($item, $index);
+                try {
+                    $results[$index] = $callback($item, $index);
+                } catch (\Throwable) {
+                    $results[$index] = null;
+                }
             }
             return $results;
         };
