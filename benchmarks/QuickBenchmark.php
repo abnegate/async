@@ -10,6 +10,11 @@
  *   --iterations=N   Number of iterations per test (default: 5)
  */
 
+if (ob_get_level()) {
+    ob_end_flush();
+}
+ob_implicit_flush(true);
+
 require_once __DIR__ . '/../vendor/autoload.php';
 
 use Utopia\Async\Parallel\Adapter\Amp;
@@ -92,8 +97,15 @@ echo "Each adapter tested {$iterations} times, showing average results.\n\n";
 $results = [];
 $primeCount = 0;
 
+// Detect if running in TTY for progress display
+$isTty = function_exists('posix_isatty') && posix_isatty(STDOUT);
+
 for ($iter = 1; $iter <= $iterations; $iter++) {
-    echo "  Iteration {$iter}/{$iterations}...\r";
+    if ($isTty) {
+        echo "  Iteration {$iter}/{$iterations}...\r";
+    } elseif ($iter === 1 || $iter === $iterations || $iter % 5 === 0) {
+        echo "  Iteration {$iter}/{$iterations}...\n";
+    }
 
     foreach ($adapters as $name => $class) {
         // Rebuild tasks for each iteration
@@ -124,7 +136,10 @@ for ($iter = 1; $iter <= $iterations; $iter++) {
     usleep(10000); // 10ms
 }
 
-echo str_repeat(' ', 30) . "\r"; // Clear progress line
+if ($isTty) {
+    echo str_repeat(' ', 30) . "\r"; // Clear progress line
+}
+echo "\n";
 
 // Calculate averages and standard deviations
 $stats = [];
