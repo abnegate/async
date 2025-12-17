@@ -70,7 +70,7 @@ jobs:
         run: |
           echo "### Swoole Adapters" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          docker compose exec -T tests php /usr/src/code/benchmarks/QuickBenchmark.php --iterations=20 2>&1 | tee benchmark_swoole.txt
+          docker compose exec -T tests php /usr/src/code/benchmarks/Benchmark.php --iterations=10 2>&1 | tee benchmark_swoole.txt
           cat benchmark_swoole.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -81,7 +81,7 @@ jobs:
         run: |
           echo "### ext-parallel Adapter" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          docker compose exec -T tests php -n -d extension=parallel.so -d extension=sockets.so /usr/src/code/benchmarks/QuickBenchmark.php --iterations=20 2>&1 | tee benchmark_parallel.txt
+          docker compose exec -T tests php -n -d extension=parallel.so -d extension=sockets.so /usr/src/code/benchmarks/Benchmark.php --iterations=10 2>&1 | tee benchmark_parallel.txt
           cat benchmark_parallel.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
@@ -124,7 +124,7 @@ jobs:
 
             </details>
 
-            > Benchmarks run with 20 iterations on GitHub Actions runner`;
+            > Benchmarks run with 10 iterations on GitHub Actions runner`;
 
             // Find existing comment
             const { data: comments } = await github.rest.issues.listComments({

@@ -208,6 +208,22 @@ class Amp extends Adapter
     }
 
     /**
+     * Maximum workers to prevent FD exhaustion.
+     * Amp's Revolt event loop accumulates FDs across pool recreations.
+     */
+    private static int $maxWorkers = 16;
+
+    /**
+     * Set the maximum number of workers for the pool.
+     *
+     * @param int $max Maximum workers (default: 8)
+     */
+    public static function setMaxWorkers(int $max): void
+    {
+        self::$maxWorkers = max(1, $max);
+    }
+
+    /**
      * Get or create the default worker pool.
      *
      * @return WorkerPool The worker pool instance
@@ -218,7 +234,8 @@ class Amp extends Adapter
         static::checkSupport();
 
         if (self::$pool === null) {
-            self::$pool = static::createWorkerPool(static::getCPUCount());
+            $workers = min(static::getCPUCount(), self::$maxWorkers);
+            self::$pool = static::createWorkerPool($workers);
         }
 
         return self::$pool;
@@ -249,9 +266,17 @@ class Amp extends Adapter
     public static function shutdown(): void
     {
         if (self::$pool !== null) {
+            try {
+                self::$pool->shutdown();
+            } catch (\Throwable) {
+                // Ignore shutdown errors
+            }
             self::$pool->kill();
             self::$pool = null;
         }
+
+        // Force garbage collection to release file descriptors
+        \gc_collect_cycles();
     }
 
     /**

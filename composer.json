@@ -29,6 +29,7 @@
     "ext-swoole": "Required for Swoole Thread and Process adapters (recommended for best performance)",
     "ext-sockets": "Required for Swoole Process adapter",
     "ext-parallel": "Required for parallel adapter (requires PHP ZTS build)",
+    "ext-ev": "Required for ReactPHP event loop (recommended for best performance)",
     "amphp/amp": "Required for Amp promise adapter",
     "amphp/parallel": "Required for Amp parallel adapter",
     "react/event-loop": "Required for ReactPHP promise and parallel adapters",

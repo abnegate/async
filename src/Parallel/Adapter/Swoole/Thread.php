@@ -211,6 +211,7 @@ class Thread extends Adapter
      * Get or create the default persistent thread pool.
      *
      * The default pool is lazily created with CPU count workers and reused across calls.
+     * If the pool becomes unhealthy (workers died), it will be recreated.
      *
      * @return ThreadPool The default thread pool
      * @throws AdapterException If thread support is not available
@@ -219,7 +220,10 @@ class Thread extends Adapter
     {
         static::checkThreadSupport();
 
-        if (self::$pool === null || self::$pool->isShutdown()) {
+        if (self::$pool === null || self::$pool->isShutdown() || !self::$pool->isHealthy()) {
+            if (self::$pool !== null && !self::$pool->isShutdown()) {
+                self::$pool->shutdown();
+            }
             self::$pool = new ThreadPool(static::getCPUCount(), static::getWorkerScript());
         }
 

@@ -376,6 +376,26 @@ class Thread
     }
 
     /**
+     * Check if all workers in the pool are healthy (still running).
+     *
+     * @return bool True if all workers are alive, false otherwise
+     */
+    public function isHealthy(): bool
+    {
+        if ($this->shutdown || empty($this->workers)) {
+            return false;
+        }
+
+        foreach ($this->workers as $worker) {
+            if (!$worker->isAlive()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Shutdown the worker pool gracefully.
      *
      * Uses Atomic shutdown flag for faster, cleaner shutdown.

@@ -29,7 +29,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 RUN docker-php-ext-install \
-    sockets
+    sockets \
+    ev
 
 ## Swoole extension
 FROM compile AS swoole

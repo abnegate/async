@@ -20,8 +20,12 @@
  */
 
 $autoloaderPath = null;
+$dir = __DIR__;
 
-$cacheFile = \sys_get_temp_dir() . '/utopia_async_autoloader.cache';
+// Use project-specific cache key to avoid conflicts between different installations
+$cacheKey = \md5($dir);
+$cacheFile = \sys_get_temp_dir() . "/utopia_async_autoloader_{$cacheKey}.cache";
+
 if (\file_exists($cacheFile)) {
     $cachedPath = \file_get_contents($cacheFile);
     if ($cachedPath && \file_exists($cachedPath)) {
@@ -30,7 +34,6 @@ if (\file_exists($cacheFile)) {
 }
 
 if ($autoloaderPath === null) {
-    $dir = __DIR__;
     $autoloadPaths = [
         $dir . '/../../../vendor/autoload.php',
         $dir . '/../../../../vendor/autoload.php',
