@@ -19,26 +19,41 @@
  * @package Utopia\Async\Parallel\Worker
  */
 
-// Find and load the Composer autoloader - optimized path search
+$autoloaderPath = null;
 $dir = __DIR__;
-$autoloadPaths = [
-    $dir . '/../../../vendor/autoload.php',
-    $dir . '/../../../../vendor/autoload.php',
-    $dir . '/../../../../../vendor/autoload.php',
-];
 
-$autoloaderFound = false;
-foreach ($autoloadPaths as $path) {
-    if (\file_exists($path)) {
-        require_once $path;
-        $autoloaderFound = true;
-        break;
+// Use project-specific cache key to avoid conflicts between different installations
+$cacheKey = \md5($dir);
+$cacheFile = \sys_get_temp_dir() . "/utopia_async_autoloader_{$cacheKey}.cache";
+
+if (\file_exists($cacheFile)) {
+    $cachedPath = \file_get_contents($cacheFile);
+    if ($cachedPath && \file_exists($cachedPath)) {
+        $autoloaderPath = $cachedPath;
     }
 }
 
-if (!$autoloaderFound) {
-    throw new \RuntimeException('Composer autoloader not found. Checked paths: ' . \implode(', ', $autoloadPaths));
+if ($autoloaderPath === null) {
+    $autoloadPaths = [
+        $dir . '/../../../vendor/autoload.php',
+        $dir . '/../../../../vendor/autoload.php',
+        $dir . '/../../../../../vendor/autoload.php',
+    ];
+
+    foreach ($autoloadPaths as $path) {
+        if (\file_exists($path)) {
+            $autoloaderPath = $path;
+            @\file_put_contents($cacheFile, $path);
+            break;
+        }
+    }
 }
+
+if ($autoloaderPath === null) {
+    throw new \RuntimeException('Composer autoloader not found');
+}
+
+require_once $autoloaderPath;
 
 use Utopia\Async\Exception;
 

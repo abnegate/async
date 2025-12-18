@@ -2,7 +2,7 @@
 
 namespace Utopia\Async;
 
-use Utopia\Async\Parallel\Constants;
+use Utopia\Async\Parallel\Configuration;
 
 /**
  * Garbage Collection trait for managing memory in long-running operations.
@@ -19,8 +19,9 @@ trait GarbageCollection
      *
      * @return void
      */
-    private function triggerGC(int $threshold = Constants::MEMORY_THRESHOLD_FOR_GC): void
+    private function triggerGC(?int $threshold = null): void
     {
+        $threshold = $threshold ?? Configuration::getMemoryThresholdForGc();
         $usage = \memory_get_usage(true);
 
         if ($usage > $threshold) {

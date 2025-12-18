@@ -14,7 +14,7 @@ class PromiseTest extends TestCase
         Promise::setAdapter(Sync::class);
 
         // Just verify it doesn't throw
-        $this->assertTrue(true);
+        $this->expectNotToPerformAssertions();
     }
 
     public function testSetAdapterWithInvalidClass(): void
@@ -51,31 +51,31 @@ class PromiseTest extends TestCase
     public function testDelay(): void
     {
         // Delay tested in adapter tests
-        $this->assertTrue(true);
+        $this->expectNotToPerformAssertions();
     }
 
     public function testAll(): void
     {
         // Collection methods tested in adapter tests
-        $this->assertTrue(true);
+        $this->expectNotToPerformAssertions();
     }
 
     public function testRace(): void
     {
         // Collection methods tested in adapter tests
-        $this->assertTrue(true);
+        $this->expectNotToPerformAssertions();
     }
 
     public function testAllSettled(): void
     {
         // Collection methods tested in adapter tests
-        $this->assertTrue(true);
+        $this->expectNotToPerformAssertions();
     }
 
     public function testAny(): void
     {
         // Collection methods tested in adapter tests
-        $this->assertTrue(true);
+        $this->expectNotToPerformAssertions();
     }
 
     public function testDefaultAdapterSelectionWithSwoole(): void
@@ -169,7 +169,10 @@ class PromiseTest extends TestCase
 
         $results = Sync::allSettled($promises)->await();
 
+        $this->assertIsArray($results);
         $this->assertCount(2, $results);
+        $this->assertIsArray($results[0]);
+        $this->assertIsArray($results[1]);
         $this->assertEquals('fulfilled', $results[0]['status']);
         $this->assertEquals('rejected', $results[1]['status']);
     }
@@ -237,7 +240,7 @@ class PromiseTest extends TestCase
         $promise = Promise::resolve($obj);
         $result = $promise->await();
 
-        $this->assertIsObject($result);
+        $this->assertInstanceOf(\stdClass::class, $result);
         $this->assertEquals('test', $result->name);
         $this->assertEquals(123, $result->value);
     }
@@ -297,7 +300,7 @@ class PromiseTest extends TestCase
     public function testRejectCanBeCaught(): void
     {
         $promise = Promise::reject(new \Exception('caught error'))
-            ->catch(fn ($e) => 'caught: ' . $e->getMessage());
+            ->catch(fn (\Throwable $e) => 'caught: ' . $e->getMessage());
 
         $this->assertEquals('caught: caught error', $promise->await());
     }
@@ -344,9 +347,13 @@ class PromiseTest extends TestCase
 
         $results = $promise->await();
 
+        $this->assertIsArray($results);
         $this->assertCount(3, $results);
         $this->assertEquals(['nested' => 'array'], $results[0]);
-        $this->assertEquals('value', $results[1]->prop);
+        $this->assertInstanceOf(\stdClass::class, $results[1]);
+        /** @var \stdClass $secondResult */
+        $secondResult = $results[1];
+        $this->assertEquals('value', $secondResult->prop);
         $this->assertEquals(42, $results[2]);
     }
 
@@ -386,6 +393,7 @@ class PromiseTest extends TestCase
 
         $results = Promise::all($promises)->await();
 
+        $this->assertIsArray($results);
         $this->assertCount(100, $results);
         for ($i = 0; $i < 100; $i++) {
             $this->assertEquals($i, $results[$i]);
@@ -402,6 +410,7 @@ class PromiseTest extends TestCase
 
         $results = Promise::all($promises)->await();
 
+        $this->assertIsArray($results);
         $this->assertEquals('a', $results['alpha']);
         $this->assertEquals('b', $results['beta']);
         $this->assertEquals('c', $results['gamma']);
@@ -439,7 +448,12 @@ class PromiseTest extends TestCase
 
         $results = Promise::allSettled($promises)->await();
 
+        $this->assertIsArray($results);
         $this->assertCount(4, $results);
+        $this->assertIsArray($results[0]);
+        $this->assertIsArray($results[1]);
+        $this->assertIsArray($results[2]);
+        $this->assertIsArray($results[3]);
         $this->assertEquals('fulfilled', $results[0]['status']);
         $this->assertEquals('success1', $results[0]['value']);
         $this->assertEquals('rejected', $results[1]['status']);
@@ -459,8 +473,10 @@ class PromiseTest extends TestCase
         // Should not throw, even with all rejections
         $results = Promise::allSettled($promises)->await();
 
+        $this->assertIsArray($results);
         $this->assertCount(3, $results);
         foreach ($results as $result) {
+            $this->assertIsArray($result);
             $this->assertEquals('rejected', $result['status']);
         }
     }
@@ -541,7 +557,7 @@ class PromiseTest extends TestCase
     {
         $promise = Promise::async(function () {
             throw new \Exception('caught me');
-        })->catch(fn ($e) => 'caught: ' . $e->getMessage());
+        })->catch(fn (\Throwable $e) => 'caught: ' . $e->getMessage());
 
         $this->assertEquals('caught: caught me', $promise->await());
     }
@@ -605,7 +621,7 @@ class PromiseTest extends TestCase
         $promise = Promise::resolve(1);
 
         for ($i = 0; $i < 10; $i++) {
-            $promise = $promise->then(fn ($v) => $v + 1);
+            $promise = $promise->then(fn (int $v) => $v + 1);
         }
 
         $this->assertEquals(11, $promise->await());
@@ -616,11 +632,11 @@ class PromiseTest extends TestCase
         $order = [];
 
         $promise = Promise::resolve('start')
-            ->then(function ($v) use (&$order) {
+            ->then(function (string $v) use (&$order) {
                 $order[] = 'then1';
                 return $v . '-then1';
             })
-            ->then(function ($v) use (&$order) {
+            ->then(function (string $v) use (&$order) {
                 $order[] = 'then2';
                 return $v . '-then2';
             })
@@ -637,11 +653,11 @@ class PromiseTest extends TestCase
     public function testCatchMiddleOfChain(): void
     {
         $promise = Promise::resolve('start')
-            ->then(function ($v) {
+            ->then(function (string $v) {
                 throw new \Exception('mid-chain error');
             })
-            ->catch(fn ($e) => 'recovered')
-            ->then(fn ($v) => $v . '-continued');
+            ->catch(fn (\Throwable $e) => 'recovered')
+            ->then(fn (string $v) => $v . '-continued');
 
         $this->assertEquals('recovered-continued', $promise->await());
     }
@@ -651,10 +667,11 @@ class PromiseTest extends TestCase
     public function testResolveWithResource(): void
     {
         $resource = fopen('php://memory', 'r');
+        $this->assertIsResource($resource);
         $promise = Promise::resolve($resource);
         $result = $promise->await();
         $this->assertIsResource($result);
-        fclose($resource);
+        fclose($result);
     }
 
     public function testResolveWithClosure(): void
@@ -671,6 +688,7 @@ class PromiseTest extends TestCase
         $largeArray = range(1, 10000);
         $promise = Promise::resolve($largeArray);
         $result = $promise->await();
+        $this->assertIsArray($result);
         $this->assertCount(10000, $result);
         $this->assertEquals(1, $result[0]);
         $this->assertEquals(10000, $result[9999]);
@@ -681,6 +699,8 @@ class PromiseTest extends TestCase
         $deep = ['level1' => ['level2' => ['level3' => ['level4' => ['value' => 'found']]]]];
         $promise = Promise::resolve($deep);
         $result = $promise->await();
+        $this->assertIsArray($result);
+        /** @var array{level1: array{level2: array{level3: array{level4: array{value: string}}}}} $result */
         $this->assertEquals('found', $result['level1']['level2']['level3']['level4']['value']);
     }
 }

@@ -39,12 +39,12 @@ jobs:
           path: /tmp/${{ env.IMAGE }}.tar
 
   unit_test:
-    name: Unit Test
+    name: Unit Tests
     runs-on: ubuntu-latest
     needs: setup
 
     steps:
-      - name: checkout
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Load Cache
@@ -61,23 +61,27 @@ jobs:
           sleep 10
 
       - name: Run Unit Tests
-        run: docker compose exec -T tests vendor/bin/phpunit /usr/src/code/tests/unit
+        run: docker compose exec -T tests composer test-unit
 
   promise_adapter_test:
-    name: Promise Adapter Tests
+    name: Promise ${{ matrix.name }}
     runs-on: ubuntu-latest
     needs: setup
     strategy:
       fail-fast: false
       matrix:
-        adapter:
-          - Sync
-          - Swoole/Coroutine
-          - Amp/Amp
-          - React/React
+        include:
+          - name: Sync
+            script: test-promise-sync
+          - name: Swoole
+            script: test-promise-swoole
+          - name: Amp
+            script: test-promise-amp
+          - name: React
+            script: test-promise-react
 
     steps:
-      - name: checkout
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Load Cache
@@ -94,24 +98,31 @@ jobs:
           sleep 10
 
       - name: Run Tests
-        run: docker compose exec -T tests vendor/bin/phpunit /usr/src/code/tests/E2e/Promise/${{matrix.adapter}}Test.php --debug
+        run: docker compose exec -T tests composer ${{ matrix.script }}
 
   parallel_adapter_test:
-    name: Parallel Adapter Tests
+    name: Parallel ${{ matrix.name }}
     runs-on: ubuntu-latest
     needs: setup
     strategy:
       fail-fast: false
       matrix:
-        adapter:
-          - Swoole/Process
-          - Swoole/Thread
-          - Amp/Amp
-          - React/React
-          - Parallel/Parallel
+        include:
+          - name: Sync
+            script: test-parallel-sync
+          - name: Swoole Thread
+            script: test-parallel-swoole-thread
+          - name: Swoole Process
+            script: test-parallel-swoole-process
+          - name: Amp
+            script: test-parallel-amp
+          - name: React
+            script: test-parallel-react
+          - name: ext-parallel
+            script: test-parallel-ext
 
     steps:
-      - name: checkout
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Load Cache
@@ -128,4 +139,4 @@ jobs:
           sleep 10
 
       - name: Run Tests
-        run: docker compose exec -T tests vendor/bin/phpunit /usr/src/code/tests/E2e/Parallel/${{matrix.adapter}}Test.php --debug
+        run: docker compose exec -T tests composer ${{ matrix.script }}

@@ -105,10 +105,10 @@ class CoroutineTest extends TestCase
     {
         SwooleCoroutine\run(function () {
             $promise = Coroutine::resolve(5)
-                ->then(function ($value) {
+                ->then(function (int $value): int {
                     return $value * 2;
                 })
-                ->then(function ($value) {
+                ->then(function (int $value): int {
                     return $value + 3;
                 });
 
@@ -120,7 +120,7 @@ class CoroutineTest extends TestCase
     {
         SwooleCoroutine\run(function () {
             $promise = Coroutine::reject(new \Exception('error'))
-                ->catch(function ($error) {
+                ->catch(function (\Throwable $error) {
                     return 'caught: ' . $error->getMessage();
                 });
 
@@ -200,7 +200,10 @@ class CoroutineTest extends TestCase
 
             $results = Coroutine::allSettled($promises)->await();
 
+            $this->assertIsArray($results);
             $this->assertCount(2, $results);
+            $this->assertIsArray($results[0]);
+            $this->assertIsArray($results[1]);
             $this->assertEquals('fulfilled', $results[0]['status']);
             $this->assertEquals('success', $results[0]['value']);
             $this->assertEquals('rejected', $results[1]['status']);

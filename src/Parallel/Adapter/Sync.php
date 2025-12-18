@@ -42,7 +42,7 @@ class Sync extends Adapter
     {
         $results = [];
         foreach ($items as $index => $item) {
-            $results[] = $callback($item, $index);
+            $results[$index] = $callback($item, $index);
         }
         return $results;
     }
@@ -61,5 +61,14 @@ class Sync extends Adapter
             $results[] = $task();
         }
         return $results;
+    }
+
+    /**
+     * Shutdown - no resources to clean up for sync adapter.
+     *
+     * @return void
+     */
+    public static function shutdown(): void
+    {
     }
 }

@@ -51,7 +51,7 @@ class ParallelTest extends TestCase
 
     public function testRunWithArguments(): void
     {
-        $result = Parallel::run(function ($x, $y) {
+        $result = Parallel::run(function (int $x, int $y): int {
             return $x * $y;
         }, 6, 7);
 
@@ -75,7 +75,7 @@ class ParallelTest extends TestCase
     {
         $items = [1, 2, 3, 4, 5];
 
-        $results = Parallel::map($items, function ($item) {
+        $results = Parallel::map($items, function (int $item): int {
             return $item ** 2;
         });
 
@@ -86,7 +86,7 @@ class ParallelTest extends TestCase
     {
         $items = range(1, 20);
 
-        $results = Parallel::map($items, function ($item) {
+        $results = Parallel::map($items, function (int $item): int {
             return $item + 10;
         }, 4);
 
@@ -139,7 +139,7 @@ class ParallelTest extends TestCase
         ";
         // Skip this test as we can't easily unset a typed static property
         // The adapter selection is tested through setAdapter tests
-        $this->assertTrue(true);
+        $this->expectNotToPerformAssertions();
     }
 
     public function testAdapterSelectionWithoutSwooleThreads(): void
@@ -175,8 +175,10 @@ class ParallelTest extends TestCase
     public function testComplexDataTypes(): void
     {
         // Test with array
-        $result = Parallel::run(function ($data) {
-            return array_map(fn ($x) => $x * 2, $data);
+        /** @var array<int> $result */
+        $result = Parallel::run(function (array $data): array {
+            /** @var array<int> $data */
+            return \array_map(fn (int $x): int => $x * 2, $data);
         }, [1, 2, 3]);
 
         $this->assertEquals([2, 4, 6], $result);
@@ -185,8 +187,10 @@ class ParallelTest extends TestCase
         $obj = new \stdClass();
         $obj->value = 100;
 
-        $result = Parallel::run(function ($obj) {
-            return $obj->value * 2;
+        $result = Parallel::run(function (\stdClass $obj): int {
+            /** @var int $value */
+            $value = $obj->value;
+            return $value * 2;
         }, $obj);
 
         $this->assertEquals(200, $result);
@@ -202,7 +206,7 @@ class ParallelTest extends TestCase
 
     public function testMapWithEmptyArray(): void
     {
-        $results = Parallel::map([], fn ($x) => $x * 2);
+        $results = Parallel::map([], fn (int $x) => $x * 2);
         $this->assertEquals([], $results);
     }
 
@@ -231,7 +235,7 @@ class ParallelTest extends TestCase
 
     public function testMapWithSingleItem(): void
     {
-        $results = Parallel::map([42], fn ($x) => $x * 2);
+        $results = Parallel::map([42], fn (int $x) => $x * 2);
         $this->assertEquals([0 => 84], $results);
     }
 
@@ -295,6 +299,7 @@ class ParallelTest extends TestCase
         $largeArray = range(1, 10000);
         $result = Parallel::run(fn () => $largeArray);
 
+        $this->assertIsArray($result);
         $this->assertCount(10000, $result);
         $this->assertEquals(1, $result[0]);
         $this->assertEquals(10000, $result[9999]);
@@ -305,13 +310,14 @@ class ParallelTest extends TestCase
         $largeString = str_repeat('x', 100000);
         $result = Parallel::run(fn () => $largeString);
 
+        $this->assertIsString($result);
         $this->assertEquals(100000, strlen($result));
     }
 
     public function testMapWithManyItems(): void
     {
         $items = range(1, 500);
-        $results = Parallel::map($items, fn ($x) => $x * 2);
+        $results = Parallel::map($items, fn (int $x) => $x * 2);
 
         $this->assertCount(500, $results);
         $this->assertEquals(2, $results[0]);
@@ -334,6 +340,8 @@ class ParallelTest extends TestCase
 
         $result = Parallel::run(fn () => $nested);
 
+        $this->assertIsArray($result);
+        /** @var array{level1: array{level2: array{level3: array{value: string}}}} $result */
         $this->assertEquals('deep', $result['level1']['level2']['level3']['value']);
     }
 
@@ -355,9 +363,13 @@ class ParallelTest extends TestCase
 
         $result = Parallel::run(fn () => $obj2);
 
+        $this->assertInstanceOf(\stdClass::class, $result);
         $this->assertEquals('root', $result->name);
-        $this->assertCount(2, $result->children);
-        $this->assertEquals('child1', $result->children[0]->name);
+        /** @var array<object> $children */
+        $children = $result->children;
+        $this->assertCount(2, $children);
+        $this->assertInstanceOf(\stdClass::class, $children[0]);
+        $this->assertEquals('child1', $children[0]->name);
     }
 
     public function testAllWithDifferentReturnTypes(): void
@@ -388,7 +400,7 @@ class ParallelTest extends TestCase
     public function testMapWithOneWorker(): void
     {
         $items = range(1, 10);
-        $results = Parallel::map($items, fn ($x) => $x * 2, 1);
+        $results = Parallel::map($items, fn (int $x): int => $x * 2, 1);
 
         $expected = [];
         foreach (range(1, 10) as $i) {
@@ -400,7 +412,7 @@ class ParallelTest extends TestCase
     public function testMapWithMoreWorkersThanItems(): void
     {
         $items = [1, 2, 3];
-        $results = Parallel::map($items, fn ($x) => $x * 2, 10);
+        $results = Parallel::map($items, fn (int $x): int => $x * 2, 10);
 
         $this->assertEquals([0 => 2, 1 => 4, 2 => 6], $results);
     }
@@ -443,7 +455,7 @@ class ParallelTest extends TestCase
     public function testMapPreservesOrder(): void
     {
         $items = range(1, 20);
-        $results = Parallel::map($items, function ($item) {
+        $results = Parallel::map($items, function (int $item): int {
             usleep(rand(1000, 5000));
             return $item * 10;
         });
@@ -458,7 +470,7 @@ class ParallelTest extends TestCase
     public function testMapCallbackReceivesIndex(): void
     {
         $items = ['a', 'b', 'c'];
-        $results = Parallel::map($items, function ($item, $index) {
+        $results = Parallel::map($items, function (string $item, int $index): string {
             return "{$index}:{$item}";
         });
 
@@ -472,18 +484,17 @@ class ParallelTest extends TestCase
     public function testForEachCallbackReceivesIndex(): void
     {
         $items = ['x', 'y', 'z'];
-        $received = [];
 
         // Since forEach doesn't return, we need to verify through side effects
         // But in parallel context, we can only verify the callback receives correct args
         // by returning them (which forEach discards)
-        Parallel::forEach($items, function ($item, $index) use (&$received) {
+        Parallel::forEach($items, function (string $item, int $index): void {
             // This modifies parent scope through closure
             // but each worker has its own copy
         });
 
         // forEach doesn't throw, so just verify it completes
-        $this->assertTrue(true);
+        $this->expectNotToPerformAssertions();
     }
 
     // Exception and error tests
@@ -522,7 +533,8 @@ class ParallelTest extends TestCase
     public function testMapContinuesAfterException(): void
     {
         $items = [1, 2, 3, 4, 5];
-        $results = Parallel::map($items, function ($item) {
+        /** @var array<int, int|null> $results */
+        $results = Parallel::map($items, function (int $item): int {
             if ($item === 3) {
                 throw new \Exception('item 3 failed');
             }
@@ -532,7 +544,7 @@ class ParallelTest extends TestCase
         $this->assertEquals(2, $results[0]);
         $this->assertEquals(4, $results[1]);
         // Failed item may be null or missing depending on error handling
-        $this->assertTrue(!isset($results[2]) || $results[2] === null);
+        $this->assertNull($results[2] ?? null);
         $this->assertEquals(8, $results[3]);
         $this->assertEquals(10, $results[4]);
     }
@@ -541,7 +553,7 @@ class ParallelTest extends TestCase
 
     public function testRunWithMultipleArguments(): void
     {
-        $result = Parallel::run(function ($a, $b, $c) {
+        $result = Parallel::run(function (int $a, int $b, int $c): int {
             return $a + $b + $c;
         }, 1, 2, 3);
 
@@ -550,7 +562,8 @@ class ParallelTest extends TestCase
 
     public function testRunWithMixedTypeArguments(): void
     {
-        $result = Parallel::run(function ($num, $str, $arr, $obj) {
+        /** @var array{num: int, str: string, arr: array<int>, obj_value: string} $result */
+        $result = Parallel::run(function (int $num, string $str, array $arr, \stdClass $obj) {
             return [
                 'num' => $num,
                 'str' => $str,

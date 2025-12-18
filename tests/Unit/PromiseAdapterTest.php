@@ -4,6 +4,7 @@ namespace Utopia\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Async\Promise\Adapter;
+use Utopia\Async\Promise\Configuration;
 
 /**
  * Test class that extends Adapter to access protected methods
@@ -195,19 +196,28 @@ class PromiseAdapterTest extends TestCase
         $this->assertEquals(-1, $constants['STATE_REJECTED']);
     }
 
-    public function testSleepDurationConstants(): void
+    public function testSleepDurationConfiguration(): void
     {
-        $reflection = new \ReflectionClass(Adapter::class);
+        // Test default values via Configuration class
+        $this->assertEquals(100, Configuration::getSleepDurationUs());
+        $this->assertEquals(10000, Configuration::getMaxSleepDurationUs());
+        $this->assertEquals(0.001, Configuration::getCoroutineSleepDurationS());
 
-        $constants = $reflection->getConstants();
+        // Test setting custom values
+        Configuration::setSleepDurationUs(200);
+        Configuration::setMaxSleepDurationUs(20000);
+        Configuration::setCoroutineSleepDurationS(0.002);
 
-        $this->assertArrayHasKey('SLEEP_DURATION_US', $constants);
-        $this->assertArrayHasKey('MAX_SLEEP_DURATION_US', $constants);
-        $this->assertArrayHasKey('COROUTINE_SLEEP_DURATION_S', $constants);
+        $this->assertEquals(200, Configuration::getSleepDurationUs());
+        $this->assertEquals(20000, Configuration::getMaxSleepDurationUs());
+        $this->assertEquals(0.002, Configuration::getCoroutineSleepDurationS());
 
-        $this->assertEquals(100, $constants['SLEEP_DURATION_US']);
-        $this->assertEquals(10000, $constants['MAX_SLEEP_DURATION_US']);
-        $this->assertEquals(0.001, $constants['COROUTINE_SLEEP_DURATION_S']);
+        // Reset to defaults
+        Configuration::reset();
+
+        $this->assertEquals(100, Configuration::getSleepDurationUs());
+        $this->assertEquals(10000, Configuration::getMaxSleepDurationUs());
+        $this->assertEquals(0.001, Configuration::getCoroutineSleepDurationS());
     }
 
     public function testConstructorWithNullExecutor(): void
@@ -219,7 +229,7 @@ class PromiseAdapterTest extends TestCase
 
     public function testConstructorWithExecutor(): void
     {
-        $promise = new TestablePromiseAdapter(function ($resolve) {
+        $promise = new TestablePromiseAdapter(function (callable $resolve) {
             $resolve('test');
         });
 
@@ -238,7 +248,7 @@ class PromiseAdapterTest extends TestCase
 
     public function testResolveChangesStateToFulfilled(): void
     {
-        $promise = new TestablePromiseAdapter(function ($resolve) {
+        $promise = new TestablePromiseAdapter(function (callable $resolve) {
             $resolve('value');
         });
 
@@ -249,7 +259,7 @@ class PromiseAdapterTest extends TestCase
 
     public function testRejectChangesStateToRejected(): void
     {
-        $promise = new TestablePromiseAdapter(function ($resolve, $reject) {
+        $promise = new TestablePromiseAdapter(function (callable $resolve, callable $reject) {
             $reject(new \Exception('error'));
         });
 
@@ -260,7 +270,7 @@ class PromiseAdapterTest extends TestCase
 
     public function testCreateReturnsNewInstance(): void
     {
-        $promise = TestablePromiseAdapter::create(function ($resolve) {
+        $promise = TestablePromiseAdapter::create(function (callable $resolve) {
             $resolve('created');
         });
 
@@ -347,7 +357,7 @@ class PromiseAdapterTest extends TestCase
     public function testThenWithFulfilledPromise(): void
     {
         $promise = TestablePromiseAdapter::resolve(10)
-            ->then(fn ($v) => $v * 2);
+            ->then(fn (int $v) => $v * 2);
 
         $this->assertEquals(20, $promise->await());
     }
@@ -355,9 +365,9 @@ class PromiseAdapterTest extends TestCase
     public function testThenChaining(): void
     {
         $promise = TestablePromiseAdapter::resolve(5)
-            ->then(fn ($v) => $v + 5)
-            ->then(fn ($v) => $v * 2)
-            ->then(fn ($v) => "result: {$v}");
+            ->then(fn (int $v) => $v + 5)
+            ->then(fn (int $v) => $v * 2)
+            ->then(fn (int $v) => "result: {$v}");
 
         $this->assertEquals('result: 20', $promise->await());
     }
@@ -560,7 +570,10 @@ class PromiseAdapterTest extends TestCase
 
         $results = $promise->await();
 
+        $this->assertIsArray($results);
         $this->assertCount(2, $results);
+        $this->assertIsArray($results[0]);
+        $this->assertIsArray($results[1]);
         $this->assertEquals('fulfilled', $results[0]['status']);
         $this->assertEquals('success', $results[0]['value']);
         $this->assertEquals('rejected', $results[1]['status']);
@@ -600,13 +613,16 @@ class PromiseAdapterTest extends TestCase
 
     public function testPromiseCanOnlySettleOnce(): void
     {
+        /** @var callable|null $resolveFunc */
         $resolveFunc = null;
-        $promise = new TestablePromiseAdapter(function ($resolve) use (&$resolveFunc) {
+        $promise = new TestablePromiseAdapter(function (callable $resolve) use (&$resolveFunc) {
             $resolveFunc = $resolve;
             $resolve('first');
         });
 
-        $resolveFunc('second');
+        if ($resolveFunc !== null) {
+            $resolveFunc('second');
+        }
 
         $this->assertEquals('first', $promise->await());
     }
@@ -614,7 +630,7 @@ class PromiseAdapterTest extends TestCase
     public function testPromiseChainWithNestedPromise(): void
     {
         $promise = TestablePromiseAdapter::resolve('outer')
-            ->then(function ($value) {
+            ->then(function (string $value) {
                 return TestablePromiseAdapter::resolve("{$value}-inner");
             });
 
@@ -686,7 +702,7 @@ class PromiseAdapterTest extends TestCase
         $promise = TestablePromiseAdapter::resolve(1);
 
         for ($i = 0; $i < 10; $i++) {
-            $promise = $promise->then(fn ($v) => $v + 1);
+            $promise = $promise->then(fn (int $v) => $v + 1);
         }
 
         $this->assertEquals(11, $promise->await());
@@ -695,8 +711,8 @@ class PromiseAdapterTest extends TestCase
     public function testCatchThenChain(): void
     {
         $promise = TestablePromiseAdapter::reject(new \Exception('initial error'))
-            ->catch(fn ($e) => 'caught: ' . $e->getMessage())
-            ->then(fn ($v) => strtoupper($v));
+            ->catch(fn (\Throwable $e) => 'caught: ' . $e->getMessage())
+            ->then(fn (string $v) => strtoupper($v));
 
         $this->assertEquals('CAUGHT: INITIAL ERROR', $promise->await());
     }
@@ -726,7 +742,7 @@ class PromiseAdapterTest extends TestCase
     public function testCatchRethrows(): void
     {
         $promise = TestablePromiseAdapter::reject(new \Exception('original'))
-            ->catch(function ($e) {
+            ->catch(function (\Throwable $e) {
                 throw new \RuntimeException('rethrown: ' . $e->getMessage());
             });
 

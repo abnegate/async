@@ -109,7 +109,6 @@ class Amp extends Adapter
                         $results[$key] = $value;
                         $remaining--;
                         if ($remaining === 0) {
-                            \ksort($results);
                             $resolve($results);
                         }
                         return $value;
@@ -183,7 +182,6 @@ class Amp extends Adapter
                         $results[$key] = ['status' => 'fulfilled', 'value' => $value];
                         $remaining--;
                         if ($remaining === 0) {
-                            \ksort($results);
                             $resolve($results);
                         }
                         return $value;
@@ -192,7 +190,6 @@ class Amp extends Adapter
                         $results[$key] = ['status' => 'rejected', 'reason' => $err];
                         $remaining--;
                         if ($remaining === 0) {
-                            \ksort($results);
                             $resolve($results);
                         }
                     }

@@ -33,20 +33,6 @@ abstract class Adapter
      */
     protected const STATE_REJECTED = -1;
 
-    /**
-     * Initial sleep duration in microseconds for polling (100us)
-     */
-    protected const SLEEP_DURATION_US = 100;
-
-    /**
-     * Maximum sleep duration in microseconds (10ms)
-     */
-    protected const MAX_SLEEP_DURATION_US = 10000;
-
-    /**
-     * Coroutine sleep duration in seconds (1ms)
-     */
-    protected const COROUTINE_SLEEP_DURATION_S = 0.001;
 
     /**
      * Current state of the promise
@@ -79,11 +65,11 @@ abstract class Adapter
         if (\is_null($executor)) {
             return;
         }
-        $resolve = function ($value) {
-            $this->settle($value, static::STATE_FULFILLED);
+        $resolve = function (mixed $value): void {
+            $this->settle($value, self::STATE_FULFILLED);
         };
-        $reject = function ($value) {
-            $this->settle($value, static::STATE_REJECTED);
+        $reject = function (mixed $value): void {
+            $this->settle($value, self::STATE_REJECTED);
         };
         $this->execute($executor, $resolve, $reject);
     }
@@ -253,9 +239,12 @@ abstract class Adapter
                 $onFinally();
                 return $value;
             },
-            function ($reason) use ($onFinally) {
+            function (mixed $reason) use ($onFinally) {
                 $onFinally();
-                throw $reason;
+                if ($reason instanceof \Throwable) {
+                    throw $reason;
+                }
+                throw new \RuntimeException(\is_string($reason) ? $reason : 'Promise rejected');
             }
         );
     }
@@ -290,13 +279,8 @@ abstract class Adapter
      */
     private function waitWithBackoff(): void
     {
-        $sleepDuration = self::SLEEP_DURATION_US;
-
         while ($this->isPending()) {
             $this->sleep();
-
-            // Exponential backoff: double sleep duration up to maximum
-            $sleepDuration = \min($sleepDuration * 2, self::MAX_SLEEP_DURATION_US);
         }
     }
 

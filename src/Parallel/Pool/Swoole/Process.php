@@ -7,7 +7,7 @@ use Swoole\Process as SwooleProcess;
 use Utopia\Async\Exception;
 use Utopia\Async\Exception\Serialization as SerializationException;
 use Utopia\Async\GarbageCollection;
-use Utopia\Async\Parallel\Constants;
+use Utopia\Async\Parallel\Configuration;
 
 /**
  * Persistent Process Pool for efficient task execution.
@@ -66,7 +66,7 @@ class Process
                         continue;
                     }
 
-                    if ($message === 'STOP') {
+                    if (\is_string($message) && \str_contains($message, 'STOP')) {
                         break;
                     }
 
@@ -81,7 +81,11 @@ class Process
 
                     try {
                         // Deserialize the task using opis/closure
-                        $task = \Opis\Closure\unserialize($taskData['task']);
+                        $serializedTask = $taskData['task'];
+                        if (!\is_string($serializedTask)) {
+                            throw new \RuntimeException('Task data is not a string');
+                        }
+                        $task = \Opis\Closure\unserialize($serializedTask);
 
                         if (!\is_callable($task)) {
                             throw new \RuntimeException('Task is not callable');
@@ -101,7 +105,7 @@ class Process
 
                     $worker->write($response);
                 }
-            }, false, SOCK_DGRAM, false);
+            }, false, SOCK_STREAM, true);
 
             $worker->start();
 
@@ -134,13 +138,13 @@ class Process
         $taskIndexMap = \array_keys($tasks);
         $taskCount = \count($tasks);
         $results = [];
-        $taskQueue = \range(0, $taskCount - 1);
+        $nextTaskIndex = 0; // Track next task to assign (O(1) instead of array_shift)
         $activeWorkers = [];
 
         // Distribute initial tasks to workers
         foreach ($this->workers as $workerId => $worker) {
-            if (!empty($taskQueue)) {
-                $taskIndex = \array_shift($taskQueue);
+            if ($nextTaskIndex < $taskCount) {
+                $taskIndex = $nextTaskIndex++;
                 $task = $taskList[$taskIndex];
 
                 // Serialize closure with Opis\Closure, then wrap in native serialize
@@ -158,17 +162,23 @@ class Process
         $lastProgressTime = $startTime;
         $lastCompleted = 0;
 
+        $deadlockInterval = Configuration::getDeadlockDetectionInterval();
+        $maxTimeout = Configuration::getMaxTaskTimeoutSeconds();
+        $workerSleepUs = Configuration::getWorkerSleepDurationUs();
+        $workerSleepSeconds = $workerSleepUs / 1000000; // Pre-compute division
+        $isInCoroutine = SwooleCoroutine::getCid() > 0; // Cache coroutine context check
+
         // Use polling approach - Swoole 6.x handles non-blocking internally
         while ($completed < $taskCount) {
             $currentTime = \time();
 
             // Deadlock detection: check if we've made progress
-            if ($currentTime - $lastProgressTime > Constants::DEADLOCK_DETECTION_INTERVAL) {
+            if ($currentTime - $lastProgressTime > $deadlockInterval) {
                 if ($completed === $lastCompleted) {
                     throw new \RuntimeException(
                         \sprintf(
                             'Potential deadlock detected: no progress for %d seconds. Completed %d/%d tasks.',
-                            Constants::DEADLOCK_DETECTION_INTERVAL,
+                            $deadlockInterval,
                             $completed,
                             $taskCount
                         )
@@ -179,11 +189,11 @@ class Process
             }
 
             // Global timeout check
-            if ($currentTime - $startTime > Constants::MAX_TASK_TIMEOUT_SECONDS) {
+            if ($currentTime - $startTime > $maxTimeout) {
                 throw new \RuntimeException(
                     \sprintf(
                         'Task execution timeout: exceeded %d seconds. Completed %d/%d tasks.',
-                        Constants::MAX_TASK_TIMEOUT_SECONDS,
+                        $maxTimeout,
                         $completed,
                         $taskCount
                     )
@@ -208,7 +218,7 @@ class Process
                 // Use native unserialize for response (results don't contain closures)
                 $result = @\unserialize(\is_string($response) ? $response : '', ['allowed_classes' => true]);
 
-                if (!\is_array($result) || !isset($result['index'])) {
+                if (!\is_array($result) || !isset($result['index']) || !\is_int($result['index'])) {
                     continue;
                 }
 
@@ -226,8 +236,8 @@ class Process
 
                 $this->triggerGC();
 
-                if (!empty($taskQueue)) {
-                    $taskIndex = \array_shift($taskQueue);
+                if ($nextTaskIndex < $taskCount) {
+                    $taskIndex = $nextTaskIndex++;
                     $task = $taskList[$taskIndex];
 
                     // Serialize closure with Opis\Closure, then wrap in native serialize
@@ -242,11 +252,11 @@ class Process
             }
 
             if (!empty($activeWorkers)) {
-                // Use non-blocking sleep when in coroutine context
-                if (SwooleCoroutine::getCid() > 0) {
-                    SwooleCoroutine::sleep(Constants::WORKER_SLEEP_DURATION_US / 1000000);
+                // Use non-blocking sleep when in coroutine context (cached check)
+                if ($isInCoroutine) {
+                    SwooleCoroutine::sleep($workerSleepSeconds);
                 } else {
-                    \usleep(Constants::WORKER_SLEEP_DURATION_US);
+                    \usleep($workerSleepUs);
                 }
             }
         }

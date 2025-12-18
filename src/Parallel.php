@@ -10,6 +10,7 @@ use Utopia\Async\Parallel\Adapter\React as ReactAdapter;
 use Utopia\Async\Parallel\Adapter\Swoole\Process as SwooleProcessAdapter;
 use Utopia\Async\Parallel\Adapter\Swoole\Thread as SwooleThreadAdapter;
 use Utopia\Async\Parallel\Adapter\Sync as SyncAdapter;
+use Utopia\Async\Parallel\Configuration;
 use Utopia\Async\Parallel\Pool\Swoole\Process as ProcessPool;
 use Utopia\Async\Parallel\Pool\Swoole\Thread as ThreadPool;
 
@@ -125,7 +126,9 @@ class Parallel
      */
     public static function all(array $tasks): array
     {
-        return static::getAdapter()::all($tasks);
+        /** @var array<mixed> $result */
+        $result = static::getAdapter()::all($tasks);
+        return $result;
     }
 
     /**
@@ -142,7 +145,9 @@ class Parallel
      */
     public static function map(array $items, callable $callback, ?int $workers = null): array
     {
-        return static::getAdapter()::map($items, $callback, $workers);
+        /** @var array<mixed> $result */
+        $result = static::getAdapter()::map($items, $callback, $workers);
+        return $result;
     }
 
     /**
@@ -179,7 +184,9 @@ class Parallel
      */
     public static function pool(array $tasks, int $maxConcurrency): array
     {
-        return static::getAdapter()::pool($tasks, $maxConcurrency);
+        /** @var array<mixed> $result */
+        $result = static::getAdapter()::pool($tasks, $maxConcurrency);
+        return $result;
     }
 
     /**
@@ -191,7 +198,9 @@ class Parallel
      */
     public static function createPool(int $workers): ThreadPool|ProcessPool
     {
-        return static::getAdapter()::createPool($workers);
+        /** @var ThreadPool|ProcessPool $pool */
+        $pool = static::getAdapter()::createPool($workers);
+        return $pool;
     }
 
     /**
@@ -202,5 +211,162 @@ class Parallel
     public static function shutdown(): void
     {
         static::getAdapter()::shutdown();
+    }
+
+    /**
+     * Get the maximum serialized data size in bytes.
+     *
+     * @return int
+     */
+    public static function getMaxSerializedSize(): int
+    {
+        return Configuration::getMaxSerializedSize();
+    }
+
+    /**
+     * Set the maximum serialized data size in bytes.
+     *
+     * @param int $bytes Maximum size in bytes (default: 10MB)
+     * @return void
+     */
+    public static function setMaxSerializedSize(int $bytes): void
+    {
+        Configuration::setMaxSerializedSize($bytes);
+    }
+
+    /**
+     * Get the stream select timeout in microseconds.
+     *
+     * @return int
+     */
+    public static function getStreamSelectTimeoutUs(): int
+    {
+        return Configuration::getStreamSelectTimeoutUs();
+    }
+
+    /**
+     * Set the stream select timeout in microseconds.
+     *
+     * @param int $microseconds Timeout in microseconds (default: 100ms)
+     * @return void
+     */
+    public static function setStreamSelectTimeoutUs(int $microseconds): void
+    {
+        Configuration::setStreamSelectTimeoutUs($microseconds);
+    }
+
+    /**
+     * Get the worker sleep duration in microseconds.
+     *
+     * @return int
+     */
+    public static function getWorkerSleepDurationUs(): int
+    {
+        return Configuration::getWorkerSleepDurationUs();
+    }
+
+    /**
+     * Set the worker sleep duration in microseconds.
+     *
+     * @param int $microseconds Sleep duration in microseconds (default: 10ms)
+     * @return void
+     */
+    public static function setWorkerSleepDurationUs(int $microseconds): void
+    {
+        Configuration::setWorkerSleepDurationUs($microseconds);
+    }
+
+    /**
+     * Get the maximum task timeout in seconds.
+     *
+     * @return int
+     */
+    public static function getMaxTaskTimeoutSeconds(): int
+    {
+        return Configuration::getMaxTaskTimeoutSeconds();
+    }
+
+    /**
+     * Set the maximum task timeout in seconds.
+     *
+     * @param int $seconds Timeout in seconds (default: 30)
+     * @return void
+     */
+    public static function setMaxTaskTimeoutSeconds(int $seconds): void
+    {
+        Configuration::setMaxTaskTimeoutSeconds($seconds);
+    }
+
+    /**
+     * Get the deadlock detection interval in seconds.
+     *
+     * @return int
+     */
+    public static function getDeadlockDetectionInterval(): int
+    {
+        return Configuration::getDeadlockDetectionInterval();
+    }
+
+    /**
+     * Set the deadlock detection interval in seconds.
+     *
+     * @param int $seconds Interval in seconds (default: 5)
+     * @return void
+     */
+    public static function setDeadlockDetectionInterval(int $seconds): void
+    {
+        Configuration::setDeadlockDetectionInterval($seconds);
+    }
+
+    /**
+     * Get the memory threshold for garbage collection in bytes.
+     *
+     * @return int
+     */
+    public static function getMemoryThresholdForGc(): int
+    {
+        return Configuration::getMemoryThresholdForGc();
+    }
+
+    /**
+     * Set the memory threshold for garbage collection in bytes.
+     *
+     * @param int $bytes Threshold in bytes (default: 50MB)
+     * @return void
+     */
+    public static function setMemoryThresholdForGc(int $bytes): void
+    {
+        Configuration::setMemoryThresholdForGc($bytes);
+    }
+
+    /**
+     * Get the garbage collection check interval.
+     *
+     * @return int
+     */
+    public static function getGcCheckInterval(): int
+    {
+        return Configuration::getGcCheckInterval();
+    }
+
+    /**
+     * Set the garbage collection check interval.
+     *
+     * @param int $taskCount Number of completed tasks between GC checks (default: 10)
+     * @return void
+     */
+    public static function setGcCheckInterval(int $taskCount): void
+    {
+        Configuration::setGcCheckInterval($taskCount);
+    }
+
+    /**
+     * Reset all configuration options to their default values.
+     *
+     * @return void
+     */
+    public static function resetConfig(): void
+    {
+        Configuration::reset();
     }
 }

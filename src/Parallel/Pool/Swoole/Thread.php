@@ -9,7 +9,7 @@ use Swoole\Thread\Barrier;
 use Swoole\Thread\Map;
 use Swoole\Thread\Queue;
 use Utopia\Async\GarbageCollection;
-use Utopia\Async\Parallel\Constants;
+use Utopia\Async\Parallel\Configuration;
 
 /**
  * Persistent Thread Pool for efficient task execution.
@@ -170,7 +170,7 @@ class Thread
         $this->lastErrors = [];
         $this->gcCheckCounter = 0;
         $this->completionCounter->set(0);
-        $this->batchId = \uniqid('batch_', true);
+        $this->batchId = \sprintf('b%d%04x', \time(), \random_int(0, 0xffff));
 
         $taskIndexMap = \array_keys($tasks);
         $taskCount = \count($tasks);
@@ -195,14 +195,15 @@ class Thread
             // busy-spinning as it yields CPU between checks.
 
             // Track pending task indices for O(n) collection instead of O(n²)
-            $pendingIndices = \array_flip(\array_keys($taskIndexMap));
+            /** @var array<int, true> $pendingIndices */
+            $pendingIndices = \array_fill_keys(\array_keys($taskIndexMap), true);
 
             // Use proper time-based timeout (30 seconds default)
             $startTime = \microtime(true);
-            $timeoutSeconds = Constants::MAX_TASK_TIMEOUT_SECONDS;
+            $timeoutSeconds = Configuration::getMaxTaskTimeoutSeconds();
             $deadline = $startTime + $timeoutSeconds;
 
-            while (!empty($pendingIndices)) {
+            while (\count($pendingIndices) > 0) {
                 // Collect available results (O(n) per iteration, only checks pending indices)
                 $this->collectResults($taskIndexMap, $results, $pendingIndices);
 
@@ -288,17 +289,23 @@ class Thread
 
             if (!empty($result['error'])) {
                 $results[$originalIndex] = null;
-                $exception = $result['exception'] ?? '';
-                if (\is_string($exception) && $exception !== '') {
+                $exceptionStr = $result['exception'] ?? '';
+                /** @var array<string, mixed> $exceptionArray */
+                $exceptionArray = [];
+                if ($exceptionStr !== '') {
                     try {
-                        $exception = \unserialize($exception);
+                        $unserialized = \unserialize($exceptionStr);
+                        if (\is_array($unserialized)) {
+                            /** @var array<string, mixed> $exceptionArray */
+                            $exceptionArray = $unserialized;
+                        }
                     } catch (\Throwable $e) {
-                        $exception = ['deserialization_error' => $e->getMessage()];
+                        $exceptionArray = ['deserialization_error' => $e->getMessage()];
                     }
                 }
                 $this->lastErrors[$originalIndex] = [
                     'message' => $result['message'] ?? 'Unknown error',
-                    'exception' => \is_array($exception) ? $exception : [],
+                    'exception' => $exceptionArray,
                 ];
             } else {
                 $value = $result['value'] ?? null;
@@ -321,7 +328,7 @@ class Thread
             unset($this->resultMap[$key]);
             unset($pendingIndices[$iterIndex]);
 
-            if (++$this->gcCheckCounter >= Constants::GC_CHECK_INTERVAL) {
+            if (++$this->gcCheckCounter >= Configuration::getGcCheckInterval()) {
                 $this->gcCheckCounter = 0;
                 $this->triggerGC();
             }
@@ -366,6 +373,26 @@ class Thread
     public function isShutdown(): bool
     {
         return $this->shutdown;
+    }
+
+    /**
+     * Check if all workers in the pool are healthy (still running).
+     *
+     * @return bool True if all workers are alive, false otherwise
+     */
+    public function isHealthy(): bool
+    {
+        if ($this->shutdown || empty($this->workers)) {
+            return false;
+        }
+
+        foreach ($this->workers as $worker) {
+            if (!$worker->isAlive()) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

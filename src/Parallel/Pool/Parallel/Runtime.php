@@ -2,7 +2,7 @@
 
 namespace Utopia\Async\Parallel\Pool\Parallel;
 
-use Utopia\Async\Parallel\Constants;
+use Utopia\Async\Parallel\Configuration;
 
 /**
  * Persistent Runtime Pool for ext-parallel.
@@ -43,7 +43,7 @@ class Runtime
     /**
      * Stored error information from last execution.
      *
-     * @var array<int, array{message: string}>
+     * @var array<int|string, array{message: string, exception?: \Throwable}>
      */
     private array $lastErrors = [];
 
@@ -88,7 +88,11 @@ class Runtime
     /**
      * Execute tasks using the runtime pool.
      *
-     * @param array<callable> $tasks Array of tasks to execute
+     * Tasks can be simple callables or arrays with 'task' and 'args':
+     * - Simple: $tasks = [fn() => 1, fn() => 2]
+     * - With args: $tasks = [['task' => $fn, 'args' => [1, 2]], ...]
+     *
+     * @param array<callable|array{task: callable, args: array<mixed>}> $tasks Array of tasks to execute
      * @return array<mixed> Results in the same order as input tasks
      * @throws \RuntimeException If pool is shutdown
      */
@@ -104,84 +108,105 @@ class Runtime
 
         $this->lastErrors = [];
 
-        /** @var array<int, \parallel\Future> $futures */
+        /** @var array<int|string, \parallel\Future> $futures */
         $futures = [];
 
-        /** @var array<int, \parallel\Runtime> $taskRuntimes */
+        /** @var array<int|string, \parallel\Runtime> $taskRuntimes */
         $taskRuntimes = [];
 
         $taskQueue = [];
         $taskIndex = 0;
 
-        // Queue all tasks
         foreach ($tasks as $index => $task) {
-            $taskQueue[$taskIndex] = [
-                'index' => $index,
-                'task' => $task,
-            ];
+            if (\is_array($task) && isset($task['task'])) {
+                $taskQueue[$taskIndex] = [
+                    'index' => $index,
+                    'task' => $task['task'],
+                    'args' => $task['args'] ?? [],
+                ];
+            } else {
+                $taskQueue[$taskIndex] = [
+                    'index' => $index,
+                    'task' => $task,
+                    'args' => [],
+                ];
+            }
             $taskIndex++;
         }
 
         $results = [];
-        $pendingTasks = $taskQueue;
+        $pendingTaskIndex = 0; // Track current position in queue instead of shifting
         $runningCount = 0;
 
+        $closures = [];
+        foreach ($taskQueue as $index => $taskData) {
+            $task = $taskData['task'];
+            /** @var callable $task */
+            $closures[$index] = $task instanceof \Closure ? $task : \Closure::fromCallable($task);
+        }
+
         // Start initial batch up to pool size
-        while ($runningCount < $this->workerCount && !empty($pendingTasks)) {
-            $taskData = \array_shift($pendingTasks);
-            if ($taskData === null) {
-                break;
-            }
+        while ($runningCount < $this->workerCount && $pendingTaskIndex < \count($taskQueue)) {
+            /** @var array{index: int|string, task: callable, args: array<mixed>} $taskData */
+            $taskData = $taskQueue[$pendingTaskIndex];
 
             $runtime = $this->acquireRuntime();
             if ($runtime === null) {
-                \array_unshift($pendingTasks, $taskData);
                 break;
             }
 
-            $task = $taskData['task'];
-            $closure = $task instanceof \Closure ? $task : \Closure::fromCallable($task);
+            $closure = $closures[$pendingTaskIndex];
+            $pendingTaskIndex++;
 
             /** @var \parallel\Future $future */
-            $future = $runtime->run($closure);
+            if (!empty($taskData['args'])) {
+                $future = $runtime->run($closure, $taskData['args']);
+            } else {
+                $future = $runtime->run($closure);
+            }
             $futures[$taskData['index']] = $future;
             $taskRuntimes[$taskData['index']] = $runtime;
             $runningCount++;
         }
 
         $startTime = \microtime(true);
-        $timeoutSeconds = Constants::MAX_TASK_TIMEOUT_SECONDS;
+        $timeoutSeconds = Configuration::getMaxTaskTimeoutSeconds();
 
         while (!empty($futures)) {
             foreach ($futures as $index => $future) {
+                /** @var \parallel\Future $future */
                 if ($future->done()) {
                     try {
                         $results[$index] = $future->value();
                     } catch (\Throwable $e) {
                         $results[$index] = null;
-                        $this->lastErrors[$index] = ['message' => $e->getMessage()];
+                        $this->lastErrors[$index] = [
+                            'message' => $e->getMessage(),
+                            'exception' => $e,
+                        ];
                     }
 
                     $this->releaseRuntime($taskRuntimes[$index]);
                     unset($futures[$index], $taskRuntimes[$index]);
                     $runningCount--;
 
-                    if (!empty($pendingTasks)) {
-                        $taskData = \array_shift($pendingTasks);
-                        if ($taskData !== null) {
-                            $runtime = $this->acquireRuntime();
-                            if ($runtime !== null) {
-                                $task = $taskData['task'];
-                                $closure = $task instanceof \Closure ? $task : \Closure::fromCallable($task);
+                    if ($pendingTaskIndex < \count($taskQueue)) {
+                        /** @var array{index: int|string, task: callable, args: array<mixed>} $taskData */
+                        $taskData = $taskQueue[$pendingTaskIndex];
+                        $runtime = $this->acquireRuntime();
+                        if ($runtime !== null) {
+                            $closure = $closures[$pendingTaskIndex];
+                            $pendingTaskIndex++;
 
-                                /** @var \parallel\Future $newFuture */
-                                $newFuture = $runtime->run($closure);
-                                $futures[$taskData['index']] = $newFuture;
-                                $taskRuntimes[$taskData['index']] = $runtime;
-                                $runningCount++;
+                            /** @var \parallel\Future $newFuture */
+                            if (!empty($taskData['args'])) {
+                                $newFuture = $runtime->run($closure, $taskData['args']);
                             } else {
-                                \array_unshift($pendingTasks, $taskData);
+                                $newFuture = $runtime->run($closure);
                             }
+                            $futures[$taskData['index']] = $newFuture;
+                            $taskRuntimes[$taskData['index']] = $runtime;
+                            $runningCount++;
                         }
                     }
                 }
@@ -193,13 +218,17 @@ class Runtime
                         $results[$index] = null;
                         $this->lastErrors[$index] = ['message' => 'Task timeout'];
                         if (isset($taskRuntimes[$index])) {
-                            $this->releaseRuntime($taskRuntimes[$index]);
+                            try {
+                                $taskRuntimes[$index]->kill();
+                            } catch (\Throwable) {
+                                // Ignore kill errors
+                            }
                         }
                     }
                     break;
                 }
 
-                \usleep(1000);
+                \usleep(Configuration::getWorkerSleepDurationUs());
             }
         }
 
@@ -213,7 +242,7 @@ class Runtime
      *
      * @return \parallel\Runtime|null Runtime instance or null if none available
      */
-    private function acquireRuntime(): ?object
+    private function acquireRuntime(): ?\parallel\Runtime
     {
         if (empty($this->available)) {
             return null;
@@ -238,7 +267,7 @@ class Runtime
     /**
      * Get errors from the last execution.
      *
-     * @return array<int, array{message: string}>
+     * @return array<int|string, array{message: string, exception?: \Throwable}>
      */
     public function getLastErrors(): array
     {

@@ -56,7 +56,6 @@ class Thread extends Adapter
     {
         static::checkThreadSupport();
 
-        // Wrap task with arguments
         $wrappedTask = function () use ($task, $args) {
             return $task(...$args);
         };
@@ -64,12 +63,11 @@ class Thread extends Adapter
         $pool = static::getPool();
         $results = $pool->execute([$wrappedTask]);
 
-        // For single task execution, re-throw any exception
         if ($pool->hasErrors()) {
             $errors = $pool->getLastErrors();
             if (isset($errors[0])) {
                 $errorInfo = $errors[0];
-                $message = $errorInfo['message'] ?? 'Task execution failed';
+                $message = $errorInfo['message'];
                 throw new \Exception($message);
             }
         }
@@ -213,6 +211,7 @@ class Thread extends Adapter
      * Get or create the default persistent thread pool.
      *
      * The default pool is lazily created with CPU count workers and reused across calls.
+     * If the pool becomes unhealthy (workers died), it will be recreated.
      *
      * @return ThreadPool The default thread pool
      * @throws AdapterException If thread support is not available
@@ -221,7 +220,10 @@ class Thread extends Adapter
     {
         static::checkThreadSupport();
 
-        if (self::$pool === null || self::$pool->isShutdown()) {
+        if (self::$pool === null || self::$pool->isShutdown() || !self::$pool->isHealthy()) {
+            if (self::$pool !== null && !self::$pool->isShutdown()) {
+                self::$pool->shutdown();
+            }
             self::$pool = new ThreadPool(static::getCPUCount(), static::getWorkerScript());
         }
 

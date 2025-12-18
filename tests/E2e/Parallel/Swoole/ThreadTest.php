@@ -41,7 +41,7 @@ class ThreadTest extends TestCase
 
     public function testRunWithArguments(): void
     {
-        $result = Thread::run(function ($a, $b) {
+        $result = Thread::run(function (int $a, int $b) {
             return $a + $b;
         }, 5, 3);
 
@@ -88,7 +88,7 @@ class ThreadTest extends TestCase
     {
         $items = [1, 2, 3, 4, 5];
 
-        $results = Thread::map($items, function ($item) {
+        $results = Thread::map($items, function (int $item) {
             return $item * 2;
         });
 
@@ -97,7 +97,7 @@ class ThreadTest extends TestCase
 
     public function testMapWithEmptyArray(): void
     {
-        $results = Thread::map([], function ($item) {
+        $results = Thread::map([], function (int $item) {
             return $item * 2;
         });
 
@@ -108,7 +108,7 @@ class ThreadTest extends TestCase
     {
         $items = range(1, 10);
 
-        $results = Thread::map($items, function ($item) {
+        $results = Thread::map($items, function (int $item) {
             return $item * 3;
         }, 2);
 
@@ -124,7 +124,7 @@ class ThreadTest extends TestCase
     {
         $items = ['a', 'b', 'c'];
 
-        $results = Thread::map($items, function ($item, $index) {
+        $results = Thread::map($items, function (string $item, int $index) {
             return $index . ':' . $item;
         });
 
@@ -256,7 +256,7 @@ class ThreadTest extends TestCase
         $items = range(1, 20);
 
         $start = microtime(true);
-        $results = Thread::map($items, function ($item) {
+        $results = Thread::map($items, function (int $item) {
             // Simulate some work - use longer duration to overcome thread overhead
             usleep(30000); // 30ms per item
             return $item * 2;
@@ -276,7 +276,7 @@ class ThreadTest extends TestCase
         $cpuCount = function_exists('swoole_cpu_num') ? swoole_cpu_num() : 4;
 
         $start = microtime(true);
-        $results = Thread::map($items, function ($item) {
+        $results = Thread::map($items, function (int $item) {
             return $item * 2;
         }, $cpuCount);
         $elapsed = microtime(true) - $start;
@@ -466,6 +466,8 @@ class ThreadTest extends TestCase
         $expectedSum = 41679167500; // Sum of squares from 1 to 5000
 
         foreach ($results as $idx => $result) {
+            $this->assertIsArray($result);
+            /** @var array{index: int, sum: int} $result */
             $this->assertEquals($idx, $result['index']);
             $this->assertEquals($expectedSum, $result['sum']);
         }
@@ -515,7 +517,7 @@ class ThreadTest extends TestCase
         $obj = new \stdClass();
         $obj->value = 'test';
         $objResult = Thread::run(fn () => $obj);
-        $this->assertIsObject($objResult);
+        $this->assertInstanceOf(\stdClass::class, $objResult);
         $this->assertEquals('test', $objResult->value);
     }
 

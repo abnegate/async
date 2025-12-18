@@ -1,4 +1,5 @@
 <?php
+
 // ReactPHP worker script
 
 // Find autoloader - try multiple paths
@@ -57,9 +58,7 @@ try {
         exit(1);
     }
 
-    if (!\is_array($args)) {
-        $args = [];
-    }
+    /** @var array<mixed> $args - validated via unserialize */
 
     $result = empty($args) ? $task() : $task(...$args);
 

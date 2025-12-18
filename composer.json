@@ -12,22 +12,24 @@
   ],
   "require": {
     "php": ">=8.1",
-    "ext-sockets": "*",
     "opis/closure": "4.*"
   },
   "require-dev": {
-    "amphp/amp": "^3.0",
-    "amphp/parallel": "^2.0",
+    "amphp/amp": "3.*",
+    "amphp/parallel": "2.*",
+    "amphp/process": "^2.0",
     "laravel/pint": "1.*",
-    "phpstan/phpstan": "1.*",
-    "phpunit/phpunit": "11.*",
-    "react/child-process": "^0.6",
-    "react/event-loop": "^1.5",
+    "phpstan/phpstan": "2.*",
+    "phpunit/phpunit": "11.5.45",
+    "react/child-process": "0.*",
+    "react/event-loop": "1.*",
     "swoole/ide-helper": "*"
   },
   "suggest": {
     "ext-swoole": "Required for Swoole Thread and Process adapters (recommended for best performance)",
+    "ext-sockets": "Required for Swoole Process adapter",
     "ext-parallel": "Required for parallel adapter (requires PHP ZTS build)",
+    "ext-ev": "Required for ReactPHP event loop (recommended for best performance)",
     "amphp/amp": "Required for Amp promise adapter",
     "amphp/parallel": "Required for Amp parallel adapter",
     "react/event-loop": "Required for ReactPHP promise and parallel adapters",
@@ -44,10 +46,26 @@
     }
   },
   "scripts": {
-    "test": "phpunit",
-    "lint": "pint",
-    "format": "php -d memory_limit=4G ./vendor/bin/pint",
-    "check": "./vendor/bin/phpstan analyse --level max --memory-limit 4G",
+    "test-unit": "vendor/bin/phpunit tests/Unit --exclude-group no-swoole",
+    "test-promise-sync": "vendor/bin/phpunit tests/E2e/Promise/SyncTest.php",
+    "test-promise-swoole": "vendor/bin/phpunit tests/E2e/Promise/Swoole",
+    "test-promise-amp": "vendor/bin/phpunit tests/E2e/Promise/Amp",
+    "test-promise-react": "vendor/bin/phpunit tests/E2e/Promise/React",
+    "test-parallel-sync": "vendor/bin/phpunit tests/E2e/Parallel/Sync",
+    "test-parallel-swoole-thread": "vendor/bin/phpunit tests/E2e/Parallel/Swoole/ThreadTest.php",
+    "test-parallel-swoole-process": "vendor/bin/phpunit tests/E2e/Parallel/Swoole/ProcessTest.php",
+    "test-parallel-amp": "vendor/bin/phpunit tests/E2e/Parallel/Amp",
+    "test-parallel-react": "vendor/bin/phpunit tests/E2e/Parallel/React",
+    "test-parallel-ext": "php -n -d extension=parallel.so -d extension=sockets.so vendor/bin/phpunit tests/E2e/Parallel/Parallel",
+    "test-e2e": "vendor/bin/phpunit tests/E2e --exclude-group ext-parallel",
+    "test": [
+      "@test-unit",
+      "@test-e2e",
+      "@test-parallel-ext"
+    ],
+    "lint": "vendor/bin/pint",
+    "format": "php -d memory_limit=4G vendor/bin/pint",
+    "check": "vendor/bin/phpstan analyse src tests --level=max --memory-limit=4G",
     "analyse": "phpstan analyse"
   },
   "config": {

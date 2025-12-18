@@ -32,7 +32,7 @@ class ProcessTest extends TestCase
 
     public function testRunWithArguments(): void
     {
-        $result = Process::run(function ($a, $b) {
+        $result = Process::run(function (int $a, int $b) {
             return $a + $b;
         }, 5, 3);
 
@@ -79,7 +79,7 @@ class ProcessTest extends TestCase
     {
         $items = [1, 2, 3, 4, 5];
 
-        $results = Process::map($items, function ($item) {
+        $results = Process::map($items, function (int $item) {
             return $item * 2;
         });
 
@@ -88,7 +88,7 @@ class ProcessTest extends TestCase
 
     public function testMapWithEmptyArray(): void
     {
-        $results = Process::map([], function ($item) {
+        $results = Process::map([], function (int $item) {
             return $item * 2;
         });
 
@@ -99,7 +99,7 @@ class ProcessTest extends TestCase
     {
         $items = range(1, 10);
 
-        $results = Process::map($items, function ($item) {
+        $results = Process::map($items, function (int $item) {
             return $item * 3;
         }, 2);
 
@@ -115,7 +115,7 @@ class ProcessTest extends TestCase
     {
         $items = ['a', 'b', 'c'];
 
-        $results = Process::map($items, function ($item, $index) {
+        $results = Process::map($items, function (string $item, int $index) {
             return $index . ':' . $item;
         });
 
@@ -250,7 +250,7 @@ class ProcessTest extends TestCase
         $items = range(1, 20);
 
         $start = microtime(true);
-        $results = Process::map($items, function ($item) {
+        $results = Process::map($items, function (int $item) {
             // Simulate some work
             usleep(10000); // 10ms per item
             return $item * 2;
@@ -270,7 +270,7 @@ class ProcessTest extends TestCase
         $cpuCount = function_exists('swoole_cpu_num') ? swoole_cpu_num() : 4;
 
         $start = microtime(true);
-        $results = Process::map($items, function ($item) {
+        $results = Process::map($items, function (int $item) {
             return $item * 2;
         }, $cpuCount);
         $elapsed = microtime(true) - $start;
@@ -460,6 +460,8 @@ class ProcessTest extends TestCase
         $expectedSum = 333383335000; // Sum of squares from 1 to 10000
 
         foreach ($results as $idx => $result) {
+            $this->assertIsArray($result);
+            /** @var array{index: int|string, sum: int} $result */
             $this->assertEquals($idx, $result['index']);
             $this->assertEquals($expectedSum, $result['sum']);
         }
@@ -509,7 +511,7 @@ class ProcessTest extends TestCase
         $obj = new \stdClass();
         $obj->value = 'test';
         $objResult = Process::run(fn () => $obj);
-        $this->assertIsObject($objResult);
+        $this->assertInstanceOf(\stdClass::class, $objResult);
         $this->assertEquals('test', $objResult->value);
     }
 

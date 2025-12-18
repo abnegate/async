@@ -4,6 +4,7 @@ namespace Utopia\Async\Promise\Adapter;
 
 use Utopia\Async\Exception\Promise;
 use Utopia\Async\Promise\Adapter;
+use Utopia\Async\Promise\Configuration;
 
 /**
  * Synchronous Promise Adapter (fallback).
@@ -49,7 +50,7 @@ class Sync extends Adapter
      */
     protected function sleep(): void
     {
-        \usleep(self::SLEEP_DURATION_US);
+        \usleep(Configuration::getSleepDurationUs());
     }
 
     /**

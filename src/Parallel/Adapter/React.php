@@ -2,8 +2,10 @@
 
 namespace Utopia\Async\Parallel\Adapter;
 
+use Opis\Closure\SerializableClosure;
 use React\ChildProcess\Process;
 use React\EventLoop\Loop;
+use React\EventLoop\LoopInterface;
 use React\EventLoop\StreamSelectLoop;
 use React\Stream\WritableStreamInterface;
 use Utopia\Async\Exception\Adapter as AdapterException;
@@ -162,6 +164,28 @@ class React extends Adapter
     }
 
     /**
+     * Create the best available event loop.
+     * Prefers ev/event extensions (no FD limit), falls back to stream_select.
+     *
+     * @return LoopInterface
+     */
+    protected static function createLoop(): LoopInterface
+    {
+        // Try ev extension first (no FD limit)
+        if (\extension_loaded('ev') && \class_exists(\React\EventLoop\ExtEvLoop::class)) {
+            return new \React\EventLoop\ExtEvLoop();
+        }
+
+        // Try event extension (no FD limit)
+        if (\extension_loaded('event') && \class_exists(\React\EventLoop\ExtEventLoop::class)) {
+            return new \React\EventLoop\ExtEventLoop();
+        }
+
+        // Fall back to stream_select (1024 FD limit)
+        return new StreamSelectLoop();
+    }
+
+    /**
      * Execute tasks in child processes using ReactPHP.
      *
      * @param array<callable> $tasks Tasks to execute
@@ -171,14 +195,15 @@ class React extends Adapter
      */
     protected static function executeInProcesses(array $tasks, int $maxConcurrency, array $defaultArgs = []): array
     {
-        // Use a fresh event loop for each execution to avoid state issues
-        $loop = new StreamSelectLoop();
+        $loop = static::createLoop();
 
         $results = [];
         $taskQueue = [];
         $activeProcesses = 0;
         $totalTasks = \count($tasks);
         $completedTasks = 0;
+        /** @var array<int|string, Process> $processes */
+        $processes = [];
 
         foreach ($tasks as $index => $task) {
             $taskQueue[] = [
@@ -201,13 +226,12 @@ class React extends Adapter
             $maxConcurrency,
             $loop,
             &$startNextTask,
-            &$processState
+            &$processState,
+            &$processes
         ): void {
             while ($activeProcesses < $maxConcurrency && !empty($taskQueue)) {
+                /** @var array{index: int|string, task: callable(): mixed, args: array<mixed>} $taskData */
                 $taskData = \array_shift($taskQueue);
-                if ($taskData === null) {
-                    break;
-                }
                 $index = $taskData['index'];
                 $task = $taskData['task'];
                 $args = $taskData['args'];
@@ -240,17 +264,15 @@ class React extends Adapter
                     $stdin->end();
                 }
 
-                if ($process->stdout !== null) {
-                    $process->stdout->on('data', function ($chunk) use ($state): void {
-                        $state->output .= $chunk;
-                    });
-                }
+                $process->stdout?->on('data', function (string $chunk) use ($state): void {
+                    $state->output .= $chunk;
+                });
 
-                if ($process->stderr !== null) {
-                    $process->stderr->on('data', function ($chunk) use ($state): void {
-                        $state->errorOutput .= $chunk;
-                    });
-                }
+                $process->stderr?->on('data', function (string $chunk) use ($state): void {
+                    $state->errorOutput .= $chunk;
+                });
+
+                $processes[$index] = $process;
 
                 $process->on('exit', function ($exitCode) use (
                     $index,
@@ -260,7 +282,8 @@ class React extends Adapter
                     $totalTasks,
                     $state,
                     $startNextTask,
-                    $loop
+                    $loop,
+                    $process
                 ): void {
                     $activeProcesses--;
                     $completedTasks++;
@@ -281,6 +304,10 @@ class React extends Adapter
                         $results[$index] = null;
                     }
 
+                    // Close streams to release file descriptors
+                    $process->stdout?->close();
+                    $process->stderr?->close();
+
                     $startNextTask();
 
                     if ($completedTasks >= $totalTasks) {
@@ -296,6 +323,23 @@ class React extends Adapter
             $loop->run();
         }
 
+        // Ensure all processes are terminated and streams closed
+        foreach ($processes as $process) {
+            if ($process->isRunning()) {
+                $process->terminate();
+            }
+            $process->stdin?->close();
+            $process->stdout?->close();
+            $process->stderr?->close();
+        }
+
+        // Clear references to help GC
+        $processes = [];
+        $processState = [];
+        unset($loop, $startNextTask);
+
+        \gc_collect_cycles();
+
         \ksort($results);
 
         return $results;
@@ -308,11 +352,21 @@ class React extends Adapter
      */
     protected static function getWorkerScript(): string
     {
+        // Return cached path if already set and file exists
         if (self::$workerScript !== null && \file_exists(self::$workerScript)) {
             return self::$workerScript;
         }
 
-        // Create a temporary worker script
+        self::$workerScript = __DIR__ . '/../Worker/react_worker.php';
+        if (\file_exists(self::$workerScript)) {
+            return self::$workerScript;
+        }
+
+        $dir = \dirname(self::$workerScript);
+        if (!\is_dir($dir)) {
+            \mkdir($dir, 0755, true);
+        }
+
         $script = <<<'PHP'
 <?php
 // ReactPHP worker script
@@ -389,14 +443,9 @@ try {
 }
 PHP;
 
-        self::$workerScript = __DIR__ . '/../Worker/react_worker.php';
-
-        $dir = \dirname(self::$workerScript);
-        if (!\is_dir($dir)) {
-            \mkdir($dir, 0755, true);
-        }
-
-        \file_put_contents(self::$workerScript, $script);
+        $tempFile = self::$workerScript . '.' . \uniqid('tmp', true);
+        \file_put_contents($tempFile, $script);
+        \rename($tempFile, self::$workerScript);
 
         return self::$workerScript;
     }
@@ -431,7 +480,7 @@ PHP;
     {
         return \class_exists(Loop::class)
             && \class_exists(Process::class)
-            && \class_exists(\Opis\Closure\SerializableClosure::class);
+            && \class_exists(SerializableClosure::class);
     }
 
     /**
@@ -458,7 +507,7 @@ PHP;
             );
         }
 
-        if (!\class_exists(\Opis\Closure\SerializableClosure::class)) {
+        if (!\class_exists(SerializableClosure::class)) {
             throw new AdapterException(
                 'Opis Closure is required for task serialization. Please install opis/closure: composer require opis/closure'
             );

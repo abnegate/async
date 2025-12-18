@@ -36,7 +36,7 @@ class ReactTest extends TestCase
 
     public function testRunWithArguments(): void
     {
-        $result = React::run(function ($a, $b) {
+        $result = React::run(function (int $a, int $b) {
             return $a + $b;
         }, 5, 3);
 
@@ -74,7 +74,7 @@ class ReactTest extends TestCase
     {
         $items = [1, 2, 3, 4, 5];
 
-        $results = React::map($items, function ($item) {
+        $results = React::map($items, function (int $item) {
             return $item * 2;
         });
 
@@ -83,7 +83,7 @@ class ReactTest extends TestCase
 
     public function testMapWithEmptyArray(): void
     {
-        $results = React::map([], function ($item) {
+        $results = React::map([], function (int $item) {
             return $item * 2;
         });
 
@@ -94,7 +94,7 @@ class ReactTest extends TestCase
     {
         $items = range(1, 10);
 
-        $results = React::map($items, function ($item) {
+        $results = React::map($items, function (int $item) {
             return $item * 3;
         }, 2);
 
@@ -110,7 +110,7 @@ class ReactTest extends TestCase
     {
         $items = ['a', 'b', 'c'];
 
-        $results = React::map($items, function ($item, $index) {
+        $results = React::map($items, function (string $item, int $index) {
             return $index . ':' . $item;
         });
 
@@ -245,6 +245,8 @@ class ReactTest extends TestCase
         $expectedSum = 333833500;
 
         foreach ($results as $idx => $result) {
+            $this->assertIsArray($result);
+            /** @var array{index: int, sum: int} $result */
             $this->assertEquals($idx, $result['index']);
             $this->assertEquals($expectedSum, $result['sum']);
         }

@@ -5,6 +5,7 @@ namespace Utopia\Async\Promise\Adapter;
 use Utopia\Async\Exception\Adapter as AdapterException;
 use Utopia\Async\Exception\Promise;
 use Utopia\Async\Promise\Adapter;
+use Utopia\Async\Promise\Configuration;
 
 /**
  * ReactPHP Promise Adapter.
@@ -61,7 +62,7 @@ class React extends Adapter
     {
         $loop = \React\EventLoop\Loop::get();
 
-        $timer = $loop->addTimer(self::SLEEP_DURATION_US / 1000000, function () use ($loop) {
+        $timer = $loop->addTimer(Configuration::getSleepDurationUs() / 1000000, function () use ($loop) {
             $loop->stop();
         });
 
@@ -114,7 +115,6 @@ class React extends Adapter
                         $results[$key] = $value;
                         $remaining--;
                         if ($remaining === 0) {
-                            \ksort($results);
                             $resolve($results);
                         }
                         return $value;
@@ -188,7 +188,6 @@ class React extends Adapter
                         $results[$key] = ['status' => 'fulfilled', 'value' => $value];
                         $remaining--;
                         if ($remaining === 0) {
-                            \ksort($results);
                             $resolve($results);
                         }
                         return $value;
@@ -197,7 +196,6 @@ class React extends Adapter
                         $results[$key] = ['status' => 'rejected', 'reason' => $err];
                         $remaining--;
                         if ($remaining === 0) {
-                            \ksort($results);
                             $resolve($results);
                         }
                     }

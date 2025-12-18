@@ -8,7 +8,7 @@ use Utopia\Async\Exception;
 use Utopia\Async\Exception\Adapter as AdapterException;
 use Utopia\Async\Exception\Serialization as SerializationException;
 use Utopia\Async\Parallel\Adapter;
-use Utopia\Async\Parallel\Constants;
+use Utopia\Async\Parallel\Configuration;
 use Utopia\Async\Parallel\Pool\Swoole\Process as ProcessPool;
 
 /**
@@ -76,6 +76,7 @@ class Process extends Adapter
         }
 
         if (Exception::isError($data)) {
+            /** @var array<string, mixed> $data */
             throw Exception::fromArray($data);
         }
 
@@ -227,7 +228,10 @@ class Process extends Adapter
                     }
 
                     $index = $taskData['index'] ?? null;
-                    if ($index === null || !isset($tasks[$index])) {
+                    if (!\is_int($index) && !\is_string($index)) {
+                        continue;
+                    }
+                    if (!isset($tasks[$index])) {
                         continue;
                     }
 
@@ -275,12 +279,12 @@ class Process extends Adapter
         while ($completed < $taskCount) {
             $currentTime = \time();
 
-            if ($currentTime - $lastProgressTime > Constants::DEADLOCK_DETECTION_INTERVAL) {
+            if ($currentTime - $lastProgressTime > Configuration::getDeadlockDetectionInterval()) {
                 if ($completed === $lastCompleted) {
                     throw new \RuntimeException(
                         \sprintf(
                             'Potential deadlock detected: no progress for %d seconds. Completed %d/%d tasks.',
-                            Constants::DEADLOCK_DETECTION_INTERVAL,
+                            Configuration::getDeadlockDetectionInterval(),
                             $completed,
                             $taskCount
                         )
@@ -290,11 +294,11 @@ class Process extends Adapter
                 $lastCompleted = $completed;
             }
 
-            if ($currentTime - $startTime > Constants::MAX_TASK_TIMEOUT_SECONDS) {
+            if ($currentTime - $startTime > Configuration::getMaxTaskTimeoutSeconds()) {
                 throw new \RuntimeException(
                     \sprintf(
                         'Task execution timeout: exceeded %d seconds. Completed %d/%d tasks.',
-                        Constants::MAX_TASK_TIMEOUT_SECONDS,
+                        Configuration::getMaxTaskTimeoutSeconds(),
                         $completed,
                         $taskCount
                     )
@@ -317,10 +321,15 @@ class Process extends Adapter
                     continue;
                 }
 
+                $resultIndex = $result['index'];
+                if (!\is_int($resultIndex) && !\is_string($resultIndex)) {
+                    continue;
+                }
+
                 if (Exception::isError($result)) {
-                    $results[$result['index']] = null;
+                    $results[$resultIndex] = null;
                 } else {
-                    $results[$result['index']] = $result['result'] ?? null;
+                    $results[$resultIndex] = $result['result'] ?? null;
                 }
 
                 $completed++;
@@ -336,9 +345,9 @@ class Process extends Adapter
             if (!empty($activeWorkers)) {
                 // Use non-blocking sleep when in coroutine context
                 if (SwooleCoroutine::getCid() > 0) {
-                    SwooleCoroutine::sleep(Constants::WORKER_SLEEP_DURATION_US / 1000000);
+                    SwooleCoroutine::sleep(Configuration::getWorkerSleepDurationUs() / 1000000);
                 } else {
-                    \usleep(Constants::WORKER_SLEEP_DURATION_US);
+                    \usleep(Configuration::getWorkerSleepDurationUs());
                 }
             }
         }
@@ -352,9 +361,12 @@ class Process extends Adapter
 
         // Wait for our specific worker processes using non-blocking wait
         while (!empty($pidsToWait)) {
-            $result = SwooleProcess::wait(false); // Non-blocking
-            if ($result !== false && \is_array($result) && isset($result['pid'])) {
-                unset($pidsToWait[$result['pid']]);
+            $waitResult = SwooleProcess::wait(false); // Non-blocking
+            if ($waitResult !== false && \is_array($waitResult) && isset($waitResult['pid'])) {
+                $pid = $waitResult['pid'];
+                if (\is_int($pid)) {
+                    unset($pidsToWait[$pid]);
+                }
             } else {
                 // No child ready yet, use non-blocking sleep to avoid CPU spin
                 if (SwooleCoroutine::getCid() > 0) {

@@ -6,6 +6,7 @@ use Swoole\Coroutine as SwooleCoroutine;
 use Swoole\Coroutine\Channel;
 use Utopia\Async\Exception\Promise;
 use Utopia\Async\Promise\Adapter;
+use Utopia\Async\Promise\Configuration;
 
 /**
  * Coroutine Promise Adapter.
@@ -74,9 +75,9 @@ class Coroutine extends Adapter
     protected function sleep(): void
     {
         if (SwooleCoroutine::getCid() > 0) {
-            SwooleCoroutine::sleep(self::COROUTINE_SLEEP_DURATION_S);
+            SwooleCoroutine::sleep(Configuration::getCoroutineSleepDurationS());
         } else {
-            \usleep(self::SLEEP_DURATION_US);
+            \usleep(Configuration::getSleepDurationUs());
         }
     }
 

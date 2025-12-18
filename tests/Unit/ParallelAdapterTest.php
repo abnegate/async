@@ -60,6 +60,10 @@ class TestableParallelAdapter extends Adapter
 
     /**
      * Expose chunkItems for testing
+     *
+     * @param array<mixed> $items
+     * @param int|null $workers
+     * @return array<array<mixed>>
      */
     public static function exposeChunkItems(array $items, ?int $workers = null): array
     {
@@ -106,7 +110,6 @@ class ParallelAdapterTest extends TestCase
     {
         $cpuCount = TestableParallelAdapter::exposeGetCPUCount();
 
-        $this->assertIsInt($cpuCount);
         $this->assertGreaterThanOrEqual(1, $cpuCount);
     }
 
@@ -202,11 +205,9 @@ class ParallelAdapterTest extends TestCase
     {
         $worker = TestableParallelAdapter::exposeCreateMapWorker();
 
-        $this->assertIsCallable($worker);
-
         // Test the worker
         $chunk = [0 => 'a', 1 => 'b', 2 => 'c'];
-        $callback = fn ($item, $index) => strtoupper($item) . $index;
+        $callback = fn (string $item, int $index) => strtoupper($item) . $index;
 
         $results = $worker($chunk, $callback);
 
@@ -218,7 +219,7 @@ class ParallelAdapterTest extends TestCase
         $worker = TestableParallelAdapter::exposeCreateMapWorker();
 
         $chunk = ['x' => 1, 'y' => 2, 'z' => 3];
-        $callback = fn ($item, $index) => $item * 10;
+        $callback = fn (int $item, string $index) => $item * 10;
 
         $results = $worker($chunk, $callback);
 
@@ -229,12 +230,10 @@ class ParallelAdapterTest extends TestCase
     {
         $worker = TestableParallelAdapter::exposeCreateForEachWorker();
 
-        $this->assertIsCallable($worker);
-
         // Test the worker
         $chunk = [0 => 'a', 1 => 'b', 2 => 'c'];
         $collected = [];
-        $callback = function ($item, $index) use (&$collected) {
+        $callback = function (string $item, int $index) use (&$collected) {
             $collected[] = "{$index}:{$item}";
         };
 

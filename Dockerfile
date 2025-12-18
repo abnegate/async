@@ -12,11 +12,11 @@ RUN composer install \
     --no-scripts \
     --prefer-dist
 
-# Use Debian-based image for better ext-parallel compatibility
-# Alpine (musl libc) has known issues with ext-parallel threading
 FROM php:8.4-zts-bookworm AS compile
 
 ENV PHP_SWOOLE_VERSION="v6.1.3"
+ENV PHP_PARALLEL_VERSION="v1.2.8"
+ENV PHP_EV_VERSION="1.2.2"
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
@@ -27,12 +27,13 @@ RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     git \
+    libev-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN docker-php-ext-install \
     sockets
 
-## Swoole extension
+## ext-swoole
 FROM compile AS swoole
 RUN \
   git clone --depth 1 --branch $PHP_SWOOLE_VERSION https://github.com/swoole/swoole-src.git && \
@@ -41,17 +42,27 @@ RUN \
   ./configure --enable-swoole-thread --enable-sockets && \
   make && make install
 
-## ext-parallel Extension (for ZTS builds)
+## ext-parallel
 FROM compile AS parallel
 
-# Build from source for better PHP 8.4 compatibility
-RUN git clone --depth 1 https://github.com/krakjoe/parallel.git && \
+RUN git clone --depth 1 --branch $PHP_PARALLEL_VERSION https://github.com/krakjoe/parallel.git && \
     cd parallel && \
     phpize && \
     ./configure && \
     make && \
     make install && \
     echo "extension=parallel.so" > /usr/local/etc/php/conf.d/parallel.ini
+
+## ext-ev
+FROM compile AS ev
+
+RUN git clone --depth 1 --branch $PHP_EV_VERSION https://bitbucket.org/osmanov/pecl-ev.git ev && \
+    cd ev && \
+    phpize && \
+    ./configure && \
+    make && \
+    make install && \
+    echo "extension=ev.so" > /usr/local/etc/php/conf.d/ev.ini
 
 FROM compile AS final
 
@@ -74,6 +85,8 @@ COPY --from=composer /usr/local/src/vendor /usr/src/code/vendor
 COPY --from=swoole /usr/local/lib/php/extensions/no-debug-zts-20240924/swoole.so /usr/local/lib/php/extensions/no-debug-zts-20240924/
 COPY --from=parallel /usr/local/lib/php/extensions/no-debug-zts-20240924/parallel.so /usr/local/lib/php/extensions/no-debug-zts-20240924/
 COPY --from=parallel /usr/local/etc/php/conf.d/parallel.ini /usr/local/etc/php/conf.d/parallel.ini
+COPY --from=ev /usr/local/lib/php/extensions/no-debug-zts-20240924/ev.so /usr/local/lib/php/extensions/no-debug-zts-20240924/
+COPY --from=ev /usr/local/etc/php/conf.d/ev.ini /usr/local/etc/php/conf.d/ev.ini
 
 COPY . /usr/src/code
 

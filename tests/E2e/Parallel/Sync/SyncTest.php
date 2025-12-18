@@ -20,7 +20,7 @@ class SyncTest extends TestCase
 
     public function testRunWithArguments(): void
     {
-        $result = Sync::run(function ($a, $b) {
+        $result = Sync::run(function (int $a, int $b) {
             return $a + $b;
         }, 5, 3);
 
@@ -82,7 +82,7 @@ class SyncTest extends TestCase
     {
         $items = [1, 2, 3, 4, 5];
 
-        $results = Sync::map($items, function ($item) {
+        $results = Sync::map($items, function (int $item) {
             return $item * 2;
         });
 
@@ -93,7 +93,7 @@ class SyncTest extends TestCase
     {
         $items = ['a', 'b', 'c'];
 
-        $results = Sync::map($items, function ($item, $index) {
+        $results = Sync::map($items, function (string $item, int $index) {
             return $index . ':' . $item;
         });
 
@@ -102,7 +102,7 @@ class SyncTest extends TestCase
 
     public function testMapWithEmptyArray(): void
     {
-        $results = Sync::map([], function ($item) {
+        $results = Sync::map([], function (int $item) {
             return $item * 2;
         });
 
@@ -114,7 +114,7 @@ class SyncTest extends TestCase
         $items = [1, 2, 3];
 
         // Workers parameter is ignored in sync mode
-        $results = Sync::map($items, fn ($item) => $item * 2, 4);
+        $results = Sync::map($items, fn (int $item) => $item * 2, 4);
 
         $this->assertEquals([2, 4, 6], $results);
     }
@@ -123,7 +123,7 @@ class SyncTest extends TestCase
     {
         $items = [1, 2, 3];
 
-        $results = Sync::map($items, fn ($item) => $item * 2, null);
+        $results = Sync::map($items, fn (int $item) => $item * 2, null);
 
         $this->assertEquals([2, 4, 6], $results);
     }
@@ -133,7 +133,7 @@ class SyncTest extends TestCase
         $items = [1, 2, 3];
         $collected = [];
 
-        Sync::forEach($items, function ($item) use (&$collected) {
+        Sync::forEach($items, function (int $item) use (&$collected) {
             $collected[] = $item * 2;
         });
 
@@ -145,7 +145,7 @@ class SyncTest extends TestCase
         $items = ['a', 'b', 'c'];
         $collected = [];
 
-        Sync::forEach($items, function ($item, $index) use (&$collected) {
+        Sync::forEach($items, function (string $item, int $index) use (&$collected) {
             $collected[] = $index . ':' . $item;
         });
 
