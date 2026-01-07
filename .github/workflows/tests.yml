@@ -8,7 +8,11 @@ env:
   IMAGE: async-dev
   CACHE_KEY: async-dev-${{ github.event.pull_request.head.sha }}
 
-on: [pull_request]
+on:
+  push:
+    branches:
+    - main
+  pull_request:
 
 jobs:
   setup:

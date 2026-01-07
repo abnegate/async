@@ -380,11 +380,8 @@ abstract class Adapter
         if (\is_object($x) || $x instanceof \Closure) {
             try {
                 if (\method_exists($x, 'then')) {
-                    $then = [$x, 'then'];
-                    if (\is_callable($then)) {
-                        $this->handleThenable($x, $then);
-                        return;
-                    }
+                    $this->handleThenable($x, [$x, 'then']);
+                    return;
                 }
             } catch (\Throwable $e) {
                 $this->result = $e;

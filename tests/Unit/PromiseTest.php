@@ -721,6 +721,7 @@ class PromiseTest extends TestCase
         });
 
         // Now resolve with itself - this should reject with TypeError
+        \assert(\is_callable($resolveFunc));
         $resolveFunc($promise);
 
         $this->expectException(\TypeError::class);
@@ -764,7 +765,7 @@ class PromiseTest extends TestCase
         Promise::setAdapter(Sync::class);
 
         // Create a custom thenable object
-        $thenable = new class {
+        $thenable = new class () {
             public function then(callable $onFulfilled, callable $onRejected): void
             {
                 $onFulfilled('thenable value');
@@ -783,7 +784,7 @@ class PromiseTest extends TestCase
     {
         Promise::setAdapter(Sync::class);
 
-        $thenable = new class {
+        $thenable = new class () {
             public function then(callable $onFulfilled, callable $onRejected): void
             {
                 $onRejected(new \Exception('thenable error'));
@@ -804,7 +805,7 @@ class PromiseTest extends TestCase
     {
         Promise::setAdapter(Sync::class);
 
-        $thenable = new class {
+        $thenable = new class () {
             public function then(callable $onFulfilled, callable $onRejected): void
             {
                 $onFulfilled('first');
@@ -825,7 +826,7 @@ class PromiseTest extends TestCase
     {
         Promise::setAdapter(Sync::class);
 
-        $thenable = new class {
+        $thenable = new class () {
             public function then(callable $onFulfilled, callable $onRejected): void
             {
                 throw new \RuntimeException('thenable threw');
@@ -846,7 +847,7 @@ class PromiseTest extends TestCase
     {
         Promise::setAdapter(Sync::class);
 
-        $thenable = new class {
+        $thenable = new class () {
             public function then(callable $onFulfilled, callable $onRejected): void
             {
                 $onFulfilled('resolved first');
@@ -868,7 +869,7 @@ class PromiseTest extends TestCase
 
         $promise = Promise::resolve('original')
             ->then(null, fn ($e) => 'error handler')
-            ->then(fn ($v) => $v . ' passed');
+            ->then(fn (string $v): string => $v . ' passed');
 
         $this->assertEquals('original passed', $promise->await());
     }
@@ -882,7 +883,7 @@ class PromiseTest extends TestCase
 
         $promise = Promise::reject(new \Exception('original error'))
             ->then(fn ($v) => 'success handler', null)
-            ->catch(fn ($e) => 'caught: ' . $e->getMessage());
+            ->catch(fn (\Throwable $e): string => 'caught: ' . $e->getMessage());
 
         $this->assertEquals('caught: original error', $promise->await());
     }
@@ -908,14 +909,14 @@ class PromiseTest extends TestCase
         Promise::setAdapter(Sync::class);
 
         // Thenable that resolves to another thenable
-        $innerThenable = new class {
+        $innerThenable = new class () {
             public function then(callable $onFulfilled, callable $onRejected): void
             {
                 $onFulfilled('deeply nested value');
             }
         };
 
-        $outerThenable = new class($innerThenable) {
+        $outerThenable = new class ($innerThenable) {
             private object $inner;
 
             public function __construct(object $inner)
