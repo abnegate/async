@@ -35,6 +35,11 @@ class Process extends Adapter
     private static ?ProcessPool $pool = null;
 
     /**
+     * Whether shutdown handler has been registered
+     */
+    private static bool $shutdownRegistered = false;
+
+    /**
      * Run a callable in a separate process and return the result.
      *
      * For single task execution, creates a temporary process. For multiple tasks,
@@ -400,6 +405,7 @@ class Process extends Adapter
      * Get or create the default persistent process pool.
      *
      * The default pool is lazily created with CPU count workers and reused across calls.
+     * A shutdown handler is automatically registered to clean up the pool on script termination.
      *
      * @return ProcessPool The default process pool
      * @throws AdapterException If process support is not available
@@ -412,7 +418,15 @@ class Process extends Adapter
             if (self::$pool !== null && !self::$pool->isShutdown()) {
                 self::$pool->shutdown();
             }
+
             self::$pool = new ProcessPool(static::getCPUCount());
+
+            if (!self::$shutdownRegistered) {
+                \register_shutdown_function(Process::shutdown(...));
+                SwooleProcess::signal(SIGTERM, Process::shutdown(...));
+                SwooleProcess::signal(SIGINT, Process::shutdown(...));
+                self::$shutdownRegistered = true;
+            }
         }
 
         return self::$pool;
@@ -433,7 +447,6 @@ class Process extends Adapter
             self::$pool = null;
         }
     }
-
 
     /**
      * Check if Swoole process support is available.

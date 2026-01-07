@@ -2,6 +2,7 @@
 
 namespace Utopia\Async\Parallel\Adapter\Swoole;
 
+use Swoole\Process as SwooleProcess;
 use Swoole\Thread as SwooleThread;
 use Utopia\Async\Exception\Adapter as AdapterException;
 use Utopia\Async\Parallel\Adapter;
@@ -29,6 +30,11 @@ class Thread extends Adapter
      * Default persistent worker pool
      */
     private static ?ThreadPool $pool = null;
+
+    /**
+     * Whether shutdown handler has been registered
+     */
+    private static bool $shutdownRegistered = false;
 
     /**
      * Path to the thread worker script
@@ -212,6 +218,7 @@ class Thread extends Adapter
      *
      * The default pool is lazily created with CPU count workers and reused across calls.
      * If the pool becomes unhealthy (workers died), it will be recreated.
+     * A shutdown handler is automatically registered to clean up the pool on script termination.
      *
      * @return ThreadPool The default thread pool
      * @throws AdapterException If thread support is not available
@@ -224,7 +231,18 @@ class Thread extends Adapter
             if (self::$pool !== null && !self::$pool->isShutdown()) {
                 self::$pool->shutdown();
             }
-            self::$pool = new ThreadPool(static::getCPUCount(), static::getWorkerScript());
+
+            $pool = new ThreadPool(static::getCPUCount(), static::getWorkerScript());
+            self::$pool = $pool;
+
+            if (!self::$shutdownRegistered) {
+                \register_shutdown_function([self::class, 'shutdown']);
+                SwooleProcess::signal(SIGTERM, Thread::shutdown(...));
+                SwooleProcess::signal(SIGINT, Thread::shutdown());
+                self::$shutdownRegistered = true;
+            }
+
+            return $pool;
         }
 
         return self::$pool;

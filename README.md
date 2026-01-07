@@ -164,11 +164,13 @@ $results = Parallel::pool($tasks, 10);
 
 ### Lifecycle Management
 
+The default worker pool is automatically cleaned up when the script terminates via `register_shutdown_function()`. You can also manually shutdown early if needed:
+
 ```php
-// Shutdown the default process pool when done
+// Optional: manually shutdown to release resources early
 Parallel::shutdown();
 
-// Create a custom pool
+// Create a custom pool (not auto-cleaned, you manage its lifecycle)
 $pool = Parallel::createPool(16); // 16 workers
 ```
 
