@@ -423,8 +423,10 @@ class Process extends Adapter
 
             if (!self::$shutdownRegistered) {
                 \register_shutdown_function(Process::shutdown(...));
-                SwooleProcess::signal(SIGTERM, Process::shutdown(...));
-                SwooleProcess::signal(SIGINT, Process::shutdown(...));
+                if (SwooleCoroutine::getCid() > 0) {
+                    SwooleProcess::signal(SIGTERM, Process::shutdown(...));
+                    SwooleProcess::signal(SIGINT, Process::shutdown(...));
+                }
                 self::$shutdownRegistered = true;
             }
         }

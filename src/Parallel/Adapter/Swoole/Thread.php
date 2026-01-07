@@ -237,8 +237,10 @@ class Thread extends Adapter
 
             if (!self::$shutdownRegistered) {
                 \register_shutdown_function([self::class, 'shutdown']);
-                SwooleProcess::signal(SIGTERM, Thread::shutdown(...));
-                SwooleProcess::signal(SIGINT, Thread::shutdown());
+                if (\Swoole\Coroutine::getCid() > 0) {
+                    SwooleProcess::signal(SIGTERM, Thread::shutdown(...));
+                    SwooleProcess::signal(SIGINT, Thread::shutdown(...));
+                }
                 self::$shutdownRegistered = true;
             }
 
