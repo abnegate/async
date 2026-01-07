@@ -8,6 +8,7 @@ use Utopia\Async\Exception;
 use Utopia\Async\Exception\Serialization as SerializationException;
 use Utopia\Async\GarbageCollection;
 use Utopia\Async\Parallel\Configuration;
+use Utopia\Async\Serializer;
 
 /**
  * Persistent Process Pool for efficient task execution.
@@ -40,6 +41,11 @@ class Process
     private array $workers = [];
 
     /**
+     * Counter for tracking when to check GC
+     */
+    private int $gcCheckCounter = 0;
+
+    /**
      * Create a new process pool using Swoole's Process\Pool.
      *
      * @param int $workerCount Number of worker processes to create
@@ -70,29 +76,27 @@ class Process
                         break;
                     }
 
-                    // Use native unserialize for the wrapper array
-                    $taskData = @\unserialize(\is_string($message) ? $message : '', ['allowed_classes' => true]);
+                    // Deserialize the entire message with Serializer (handles closures automatically)
+                    try {
+                        $taskData = Serializer::unserialize(\is_string($message) ? $message : '');
+                    } catch (\Throwable $e) {
+                        continue;
+                    }
 
-                    if (!\is_array($taskData) || !isset($taskData['index'])) {
+                    if (!\is_array($taskData) || !isset($taskData['index'], $taskData['task'])) {
                         continue;
                     }
 
                     $index = $taskData['index'];
+                    $task = $taskData['task'];
 
                     try {
-                        // Deserialize the task using opis/closure
-                        $serializedTask = $taskData['task'];
-                        if (!\is_string($serializedTask)) {
-                            throw new \RuntimeException('Task data is not a string');
-                        }
-                        $task = \Opis\Closure\unserialize($serializedTask);
-
                         if (!\is_callable($task)) {
                             throw new \RuntimeException('Task is not callable');
                         }
 
                         $result = $task();
-                        $response = \serialize([
+                        $response = Serializer::serialize([
                             'index' => $index,
                             'success' => true,
                             'result' => $result,
@@ -100,7 +104,7 @@ class Process
                     } catch (\Throwable $e) {
                         $error = Exception::toArray($e);
                         $error['index'] = $index;
-                        $response = \serialize($error);
+                        $response = Serializer::serialize($error);
                     }
 
                     $worker->write($response);
@@ -147,10 +151,8 @@ class Process
                 $taskIndex = $nextTaskIndex++;
                 $task = $taskList[$taskIndex];
 
-                // Serialize closure with Opis\Closure, then wrap in native serialize
-                $serializedTask = \Opis\Closure\serialize($task);
-                $worker->write(\serialize([
-                    'task' => $serializedTask,
+                $worker->write(Serializer::serialize([
+                    'task' => $task,
                     'index' => $taskIndex,
                 ]));
                 $activeWorkers[$workerId] = $taskIndex;
@@ -168,36 +170,42 @@ class Process
         $workerSleepSeconds = $workerSleepUs / 1000000; // Pre-compute division
         $isInCoroutine = SwooleCoroutine::getCid() > 0; // Cache coroutine context check
 
+        $timeCheckCounter = 0;
+        $timeCheckInterval = 100; // Check time every 100 iterations
+        $currentTime = $startTime;
+
         // Use polling approach - Swoole 6.x handles non-blocking internally
         while ($completed < $taskCount) {
-            $currentTime = \time();
+            if (++$timeCheckCounter >= $timeCheckInterval) {
+                $timeCheckCounter = 0;
+                $currentTime = \time();
 
-            // Deadlock detection: check if we've made progress
-            if ($currentTime - $lastProgressTime > $deadlockInterval) {
-                if ($completed === $lastCompleted) {
+                if ($currentTime - $lastProgressTime > $deadlockInterval) {
+                    if ($completed === $lastCompleted) {
+                        throw new \RuntimeException(
+                            \sprintf(
+                                'Potential deadlock detected: no progress for %d seconds. Completed %d/%d tasks.',
+                                $deadlockInterval,
+                                $completed,
+                                $taskCount
+                            )
+                        );
+                    }
+                    $lastProgressTime = $currentTime;
+                    $lastCompleted = $completed;
+                }
+
+                // Global timeout check
+                if ($currentTime - $startTime > $maxTimeout) {
                     throw new \RuntimeException(
                         \sprintf(
-                            'Potential deadlock detected: no progress for %d seconds. Completed %d/%d tasks.',
-                            $deadlockInterval,
+                            'Task execution timeout: exceeded %d seconds. Completed %d/%d tasks.',
+                            $maxTimeout,
                             $completed,
                             $taskCount
                         )
                     );
                 }
-                $lastProgressTime = $currentTime;
-                $lastCompleted = $completed;
-            }
-
-            // Global timeout check
-            if ($currentTime - $startTime > $maxTimeout) {
-                throw new \RuntimeException(
-                    \sprintf(
-                        'Task execution timeout: exceeded %d seconds. Completed %d/%d tasks.',
-                        $maxTimeout,
-                        $completed,
-                        $taskCount
-                    )
-                );
             }
 
             // Poll each worker for results
@@ -215,8 +223,11 @@ class Process
                     continue;
                 }
 
-                // Use native unserialize for response (results don't contain closures)
-                $result = @\unserialize(\is_string($response) ? $response : '', ['allowed_classes' => true]);
+                try {
+                    $result = Serializer::unserialize(\is_string($response) ? $response : '');
+                } catch (\Throwable $e) {
+                    continue;
+                }
 
                 if (!\is_array($result) || !isset($result['index']) || !\is_int($result['index'])) {
                     continue;
@@ -234,20 +245,22 @@ class Process
                 $completed++;
                 unset($activeWorkers[$workerId]);
 
-                $this->triggerGC();
+                if (++$this->gcCheckCounter >= Configuration::getGcCheckInterval()) {
+                    $this->gcCheckCounter = 0;
+                    $this->triggerGC();
+                }
 
                 if ($nextTaskIndex < $taskCount) {
                     $taskIndex = $nextTaskIndex++;
                     $task = $taskList[$taskIndex];
 
-                    // Serialize closure with Opis\Closure, then wrap in native serialize
-                    $serializedTask = \Opis\Closure\serialize($task);
-                    $worker->write(\serialize([
-                        'task' => $serializedTask,
+                    // Serialize entire message with Serializer (handles closures automatically)
+                    $worker->write(Serializer::serialize([
+                        'task' => $task,
                         'index' => $taskIndex,
                     ]));
                     $activeWorkers[$workerId] = $taskIndex;
-                    unset($task, $serializedTask);
+                    unset($task);
                 }
             }
 

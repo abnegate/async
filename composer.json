@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "High-performance concurrent + parallel library with Promise and Parallel execution support for PHP.",
   "type": "library",
-  "license": "BSD-3-Clause",
+  "license": "MIT",
   "authors": [
     {
       "name": "Appwrite Team",
@@ -65,8 +65,7 @@
     ],
     "lint": "vendor/bin/pint",
     "format": "php -d memory_limit=4G vendor/bin/pint",
-    "check": "vendor/bin/phpstan analyse src tests --level=max --memory-limit=4G",
-    "analyse": "phpstan analyse"
+    "check": "vendor/bin/phpstan analyse src tests --level=max --memory-limit=4G"
   },
   "config": {
     "platform": {

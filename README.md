@@ -2,11 +2,11 @@
 
 [![License](https://img.shields.io/github/license/utopia-php/async.svg)](https://github.com/utopia-php/async/blob/main/LICENSE)
 
-A high-performance async/parallel library for PHP 8.0+ providing JavaScript-like Promises and true multi-core parallel execution using Swoole.
+A high-performance async/parallel library for PHP 8.1+ providing [Promises/A+](https://promisesaplus.com/) compliant promises and true multi-core parallel execution.
 
 ## Features
 
-- **Promise API** - Familiar JavaScript-like promises with `then()`, `catch()`, `finally()`
+- **Promise API** - Promises/A+ compliant with `then()`, `catch()`, `finally()`, `await()`
 - **Parallel Execution** - True multi-core parallelism using threads and processes
 - **Automatic Adapter Selection** - Chooses optimal strategy based on runtime environment
 - **Closure Support** - Execute closures across process boundaries
@@ -20,9 +20,17 @@ composer require utopia-php/async
 
 ## Requirements
 
-- ext-sockets (for process mode)
-- PHP 8.1+ ZTS
-- ext-swoole (6.0+, with `--enable-swoole-thread` for thread mode)
+- PHP 8.1+
+
+### Optional Extensions (for parallel execution)
+
+| Extension/Package        | Required For                                           |
+|--------------------------|--------------------------------------------------------|
+| `ext-swoole` >=6.0 + ZTS | Swoole Thread adapter (best performance)               |
+| `ext-swoole` + `ext-sockets` | Swoole Process adapter                            |
+| `ext-parallel` + ZTS     | ext-parallel adapter                                   |
+| `amphp/parallel`         | Amp adapter                                            |
+| `react/child-process`    | React adapter                                          |
 
 ## Promise API
 
@@ -43,6 +51,13 @@ Promise::async(fn() => 10)
     ->catch(fn($e) => error_log($e->getMessage()))
     ->finally(fn() => cleanup())
     ->await(); // Returns: 25
+
+// Execute multiple callables concurrently
+$results = Promise::map([
+    fn() => fetchUser(),
+    fn() => fetchPosts(),
+    fn() => fetchComments(),
+])->await(); // [user, posts, comments]
 ```
 
 ### Promise Methods
@@ -161,20 +176,25 @@ $pool = Parallel::createPool(16); // 16 workers
 
 The library automatically selects the best adapter based on available extensions.
 
-### Adapter Matrix
+### Promise Adapter Priority
 
-| Adapter              | Component | Runtime        | Requirements                                              |
-|----------------------|-----------|----------------|-----------------------------------------------------------|
-| **Swoole\Coroutine** | Promise   | Async          | `ext-swoole`                                              |
-| **Amp**              | Promise   | Async          | `amphp/amp`, `revolt/event-loop`                          |
-| **React**            | Promise   | Async          | `react/event-loop`                                        |
-| **Sync**             | Promise   | Blocking       | None (fallback)                                           |
-| **Swoole\Thread**    | Parallel  | Multi-threaded | `ext-swoole` >=6.0 with threads, PHP ZTS                  |
-| **Swoole\Process**   | Parallel  | Multi-process  | `ext-swoole`                                              |
-| **Parallel**         | Parallel  | Multi-threaded | `ext-parallel`, PHP ZTS                                   |
-| **Amp**              | Parallel  | Multi-process  | `amphp/parallel`                                          |
-| **React**            | Parallel  | Multi-process  | `react/child-process`, `react/event-loop`, `opis/closure` |
-| **Sync**             | Parallel  | Sequential     | None (fallback)                                           |
+| Priority | Adapter              | Runtime  | Requirements                     |
+|----------|----------------------|----------|----------------------------------|
+| 1        | **Swoole\Coroutine** | Async    | `ext-swoole`                     |
+| 2        | **React**            | Async    | `react/event-loop`               |
+| 3        | **Amp**              | Async    | `amphp/amp`, `revolt/event-loop` |
+| 4        | **Sync**             | Blocking | None (fallback)                  |
+
+### Parallel Adapter Priority
+
+| Priority | Adapter              | Runtime        | Requirements                                              |
+|----------|----------------------|----------------|-----------------------------------------------------------|
+| 1        | **Swoole\Thread**    | Multi-threaded | `ext-swoole` >=6.0 with threads, PHP ZTS                  |
+| 2        | **ext-parallel**     | Multi-threaded | `ext-parallel`, PHP ZTS                                   |
+| 3        | **Swoole\Process**   | Multi-process  | `ext-swoole`, `ext-sockets`                               |
+| 4        | **React**            | Multi-process  | `react/child-process`, `react/event-loop`, `opis/closure` |
+| 5        | **Amp**              | Multi-process  | `amphp/parallel`                                          |
+| 6        | **Sync**             | Sequential     | None (fallback)                                           |
 
 ### Manual Adapter Selection
 
@@ -262,27 +282,6 @@ Promise::resetConfig();
 | `MaxSleepDurationUs`      | 10ms    | Maximum sleep duration (backoff cap)  |
 | `CoroutineSleepDurationS` | 1ms     | Coroutine context sleep duration      |
 
-## Parallel Adapters
-
-Two parallel execution strategies are available:
-
-| Adapter     | Use Case           | Characteristics                      |
-|-------------|--------------------|--------------------------------------|
-| **Thread**  | CPU-bound tasks    | Shared memory, lower overhead        |
-| **Process** | Isolated execution | Full isolation, slower communication |
-
-```php
-use Utopia\Async\Parallel;
-use Utopia\Async\Parallel\Adapter\Swoole\Thread;
-use Utopia\Async\Parallel\Adapter\Swoole\Process;
-
-// Use thread pool (default with Swoole 6+ and ZTS)
-Parallel::setAdapter(Thread::class);
-
-// Use process pool
-Parallel::setAdapter(Process::class);
-```
-
 ## Performance
 
 The library achieves significant speedups for CPU-intensive and I/O-bound workloads through true parallel execution.
@@ -292,23 +291,20 @@ The library achieves significant speedups for CPU-intensive and I/O-bound worklo
 Benchmarks automatically detect and test all available adapters in your environment:
 
 ```bash
-# Quick benchmark - fast comparison of all available adapters
-php benchmarks/QuickBenchmark.php
+# Run benchmarks with default settings (5 iterations, 50% load)
+php benchmarks/Benchmark.php
 
-# Comprehensive benchmark - detailed workload analysis
-php benchmarks/AdapterBenchmark.php
+# Higher iteration count for more stable results
+php benchmarks/Benchmark.php --iterations=10
 
-# Quick mode (shorter tests)
-php benchmarks/AdapterBenchmark.php --quick
+# Adjust workload intensity (1-100, default 50)
+php benchmarks/Benchmark.php --load=75
 
-# Scaling benchmark - task count analysis
-php benchmarks/ScalingBenchmark.php
+# JSON output for charting and analysis
+php benchmarks/Benchmark.php --json
 
-# Custom iteration count for stability
-php benchmarks/QuickBenchmark.php --iterations=10
-
-# JSON output for charting
-php benchmarks/ScalingBenchmark.php --json
+# Combined options
+php benchmarks/Benchmark.php --iterations=10 --load=75 --json
 ```
 
 ### Adapter Comparison
@@ -322,11 +318,39 @@ php benchmarks/ScalingBenchmark.php --json
 | **ext-parallel**   | Multi-threaded | CPU-bound tasks | Native PHP threads             |
 | **Sync**           | Sequential     | Fallback        | Always available               |
 
+### Benchmark Results
+
+Results from running benchmarks with `--iterations=10 --load=75` on an 8-core system:
+
+**CPU-Intensive Workloads (8 tasks)**
+
+| Benchmark | Sync | Swoole Thread | Swoole Process | Amp | React |
+|-----------|------|---------------|----------------|-----|-------|
+| Prime calculation (300k) | 0.608s | 0.096s (6.4x) | 0.093s (6.6x) | 0.095s (6.4x) | 0.146s (4.2x) |
+| Matrix multiply (300x300) | 2.957s | 0.655s (4.5x) | 0.494s (6.0x) | 0.504s (5.9x) | 0.921s (3.2x) |
+
+**I/O-Simulated Workloads (8 tasks)**
+
+| Benchmark | Sync | Swoole Thread | Swoole Process | Amp | React |
+|-----------|------|---------------|----------------|-----|-------|
+| Sleep tasks (75ms each) | 0.609s | 0.089s (6.8x) | 0.089s (6.9x) | 0.091s (6.7x) | 0.103s (5.9x) |
+| Mixed workload | 0.367s | 0.119s (3.1x) | 0.079s (4.6x) | 0.087s (4.2x) | 0.105s (3.5x) |
+
+**ext-parallel Benchmark Results (4-core system)**
+
+| Benchmark | Sync | ext-parallel | Amp | React |
+|-----------|------|--------------|-----|-------|
+| Prime calculation (300k) | 0.307s | 0.082s (3.8x) | 0.087s (3.5x) | 0.098s (3.1x) |
+| Matrix multiply (300x300) | 1.453s | 0.386s (3.8x) | 0.380s (3.8x) | 0.394s (3.7x) |
+| Sleep tasks (75ms each) | 0.305s | 0.084s (3.7x) | 0.087s (3.5x) | 0.106s (2.9x) |
+
 ### Key Findings
 
-- **Thread-based adapters** (Swoole Thread, ext-parallel) excel at CPU-intensive tasks
-- **Process-based adapters** (Swoole Process, Amp, React) perform better for I/O-bound workloads
-- Speedup scales with task weight - heavier tasks benefit more from parallelism
+- **Swoole Process** achieves the best overall performance with up to **6.9x speedup** on I/O workloads
+- **Swoole Thread** and **Amp** show comparable performance on CPU-intensive tasks (~6x speedup)
+- **ext-parallel** excels at CPU-bound tasks, achieving **3.8x speedup** on a 4-core system
+- **React** provides solid multi-process execution but has higher overhead than other adapters
+- Parallelism overhead means single-task workloads may be slower than sequential execution
 - Results vary by environment - run benchmarks to find the best adapter for your use case
 
 ## Development

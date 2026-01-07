@@ -183,32 +183,32 @@ abstract class Adapter
     abstract public static function delay(int $milliseconds): static;
 
     /**
-     * Execute the promise.
+     * Attach callbacks for promise resolution and/or rejection.
      *
-     * @param callable|null $onFulfilled
-     * @param callable|null $onRejected
-     * @return static
+     * @param callable|null $onFulfilled Called when promise fulfills
+     * @param callable|null $onRejected Called when promise rejects
+     * @return static A new promise
      */
     public function then(
         ?callable $onFulfilled = null,
         ?callable $onRejected = null
     ): static {
-        if ($this->isRejected() && $onRejected === null) {
-            return $this;
-        }
-        if ($this->isFulfilled() && $onFulfilled === null) {
-            return $this;
-        }
         return static::create(function (callable $resolve, callable $reject) use ($onFulfilled, $onRejected) {
             $this->waitWithBackoff();
 
-            $callable = $this->isFulfilled() ? $onFulfilled : $onRejected;
-            if (!\is_callable($callable)) {
-                $resolve($this->result);
+            $callback = $this->isFulfilled() ? $onFulfilled : $onRejected;
+
+            if (!\is_callable($callback)) {
+                if ($this->isFulfilled()) {
+                    $resolve($this->result);
+                } else {
+                    $reject($this->result);
+                }
                 return;
             }
+
             try {
-                $resolve($callable($this->result));
+                $resolve($callback($this->result));
             } catch (\Throwable $error) {
                 $reject($error);
             }
@@ -335,7 +335,7 @@ abstract class Adapter
 
 
     /**
-     * Atomically settle the promise with a value and state
+     * Atomically settle the promise with a value and state.
      *
      * @param mixed $value
      * @param int $state
@@ -350,23 +350,123 @@ abstract class Adapter
 
         $this->settled = true;
 
-        if (!$value instanceof self) {
+        if ($state === self::STATE_FULFILLED) {
+            $this->resolvePromise($value);
+        } else {
             $this->result = $value;
             $this->state = $state;
+        }
+    }
+
+    /**
+     * The Promise Resolution Procedure per Promises/A+
+     *
+     * @param mixed $x The value to resolve with
+     * @return void
+     */
+    private function resolvePromise(mixed $x): void
+    {
+        if ($x === $this) {
+            $this->result = new \TypeError('A promise cannot be resolved with itself');
+            $this->state = self::STATE_REJECTED;
             return;
         }
 
-        // Handle promise chaining
+        if ($x instanceof self) {
+            $this->adoptPromiseState($x);
+            return;
+        }
+
+        if (\is_object($x) || $x instanceof \Closure) {
+            try {
+                if (\method_exists($x, 'then')) {
+                    $then = [$x, 'then'];
+                    if (\is_callable($then)) {
+                        $this->handleThenable($x, $then);
+                        return;
+                    }
+                }
+            } catch (\Throwable $e) {
+                $this->result = $e;
+                $this->state = self::STATE_REJECTED;
+                return;
+            }
+        }
+
+        $this->result = $x;
+        $this->state = self::STATE_FULFILLED;
+    }
+
+    /**
+     * Adopt the state of another promise.
+     *
+     * @param self $promise
+     * @return void
+     */
+    private function adoptPromiseState(self $promise): void
+    {
         $resolved = false;
-        $callable = function ($resolvedValue) use (&$resolved, $state) {
-            $this->result = $resolvedValue;
-            $this->state = $state;
-            $resolved = true;
-        };
 
-        $value->then($callable, $callable);
+        $promise->then(
+            function ($value) use (&$resolved) {
+                if ($resolved) {
+                    return;
+                }
+                $resolved = true;
+                $this->resolvePromise($value);
+            },
+            function ($reason) use (&$resolved) {
+                if ($resolved) {
+                    return;
+                }
+                $resolved = true;
+                $this->result = $reason;
+                $this->state = self::STATE_REJECTED;
+            }
+        );
 
-        while (!$resolved) {
+        while ($this->isPending()) {
+            $this->sleep();
+        }
+    }
+
+    /**
+     * Handle a thenable object per Promises/A+
+     *
+     * @param object $thenable
+     * @param callable $then
+     * @return void
+     */
+    private function handleThenable(object $thenable, callable $then): void
+    {
+        $called = false;
+
+        try {
+            $then(
+                function ($y) use (&$called) {
+                    if ($called) {
+                        return;
+                    }
+                    $called = true;
+                    $this->resolvePromise($y);
+                },
+                function ($r) use (&$called) {
+                    if ($called) {
+                        return;
+                    }
+                    $called = true;
+                    $this->result = $r;
+                    $this->state = self::STATE_REJECTED;
+                }
+            );
+        } catch (\Throwable $e) {
+            if (!$called) {
+                $this->result = $e;
+                $this->state = self::STATE_REJECTED;
+            }
+        }
+
+        while ($this->isPending()) {
             $this->sleep();
         }
     }

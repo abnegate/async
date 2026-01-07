@@ -13,6 +13,12 @@ namespace Utopia\Async;
 class Serializer
 {
     /**
+     * Magic byte prefix to identify Opis\Closure serialized data
+     * Using non-printable byte 0x01 followed by 'OC' to avoid false positives
+     */
+    private const OPIS_CLOSURE_PREFIX = "\x01OC";
+
+    /**
      * Serialize data using opis/closure for Closures and standard serialization for everything else.
      *
      * @param mixed $data
@@ -21,13 +27,13 @@ class Serializer
     public static function serialize(mixed $data): string
     {
         if ($data instanceof \Closure) {
-            return \Opis\Closure\serialize($data);
+            return self::OPIS_CLOSURE_PREFIX . \Opis\Closure\serialize($data);
         }
         if (!\is_array($data) && !\is_object($data)) {
             return \serialize($data);
         }
         if (self::containsClosures($data)) {
-            return \Opis\Closure\serialize($data);
+            return self::OPIS_CLOSURE_PREFIX . \Opis\Closure\serialize($data);
         }
 
         return \serialize($data);
@@ -47,9 +53,11 @@ class Serializer
             throw new \RuntimeException('Cannot unserialize empty data');
         }
 
-        if (\str_contains($data, 'Opis\Closure\\')) {
-            $result = @\Opis\Closure\unserialize($data, $options);
-            if ($result !== false || $data === \Opis\Closure\serialize(false)) {
+        // Fast prefix check - only check first 3 bytes
+        if (\str_starts_with($data, self::OPIS_CLOSURE_PREFIX)) {
+            $opisData = \substr($data, 3);
+            $result = @\Opis\Closure\unserialize($opisData, $options);
+            if ($result !== false || $opisData === \Opis\Closure\serialize(false)) {
                 return $result;
             }
         }
@@ -66,11 +74,28 @@ class Serializer
     }
 
     /**
-     * Memoization cache for closure detection
+     * Memoization cache for closure detection using WeakMap to prevent memory leaks
      *
-     * @var array<int, bool>
+     * @var \WeakMap<object, bool>
      */
-    private static array $closureCache = [];
+    private static \WeakMap $closureCache;
+
+    /**
+     * Cache of ReflectionClass instances by class name to avoid recreating them
+     *
+     * @var array<string, \ReflectionClass<object>>
+     */
+    private static array $reflectionCache = [];
+
+    /**
+     * Initialize the WeakMap if not already initialized
+     */
+    private static function initClosureCache(): void
+    {
+        if (!isset(self::$closureCache)) {
+            self::$closureCache = new \WeakMap();
+        }
+    }
 
     /**
      * Check if an array or object contains closures recursively.
@@ -99,10 +124,12 @@ class Serializer
         }
 
         if (\is_object($data)) {
+            self::initClosureCache();
+
             $objectId = \spl_object_id($data);
 
-            if (isset(self::$closureCache[$objectId])) {
-                return self::$closureCache[$objectId];
+            if (isset(self::$closureCache[$data])) {
+                return self::$closureCache[$data];
             }
 
             if (isset($visited[$objectId])) {
@@ -111,31 +138,47 @@ class Serializer
 
             $visited[$objectId] = true;
 
-            $reflector = new \ReflectionObject($data);
+            // Check both declared properties (via reflection) and dynamic properties (via get_object_vars)
+            $className = \get_class($data);
+            if (!isset(self::$reflectionCache[$className])) {
+                self::$reflectionCache[$className] = new \ReflectionClass($className);
+            }
+
+            $reflector = self::$reflectionCache[$className];
             foreach ($reflector->getProperties() as $property) {
-                $property->setAccessible(true);
                 if ($property->isInitialized($data)) {
-                    if (self::containsClosures($property->getValue($data), $depth - 1, $visited)) {
-                        self::$closureCache[$objectId] = true;
+                    $value = $property->getValue($data);
+                    if (self::containsClosures($value, $depth - 1, $visited)) {
+                        self::$closureCache[$data] = true;
                         return true;
                     }
                 }
             }
 
-            self::$closureCache[$objectId] = false;
+            // Also check dynamic properties (like stdClass properties)
+            foreach (\get_object_vars($data) as $value) {
+                if (self::containsClosures($value, $depth - 1, $visited)) {
+                    self::$closureCache[$data] = true;
+                    return true;
+                }
+            }
+
+            self::$closureCache[$data] = false;
         }
 
         return false;
     }
 
     /**
-     * Clear the closure detection cache.
-     * Call this periodically to prevent unbounded memory growth.
+     * Clear the reflection cache.
      *
      * @return void
      */
     public static function clearClosureCache(): void
     {
-        self::$closureCache = [];
+        self::$reflectionCache = [];
+        if (isset(self::$closureCache)) {
+            self::$closureCache = new \WeakMap();
+        }
     }
 }

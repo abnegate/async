@@ -19,8 +19,9 @@ ob_implicit_flush(true);
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
+use Utopia\Async\Parallel;
 use Utopia\Async\Parallel\Adapter\Amp;
-use Utopia\Async\Parallel\Adapter\Parallel;
+use Utopia\Async\Parallel\Adapter\Parallel as ParallelAdapter;
 use Utopia\Async\Parallel\Adapter\React;
 use Utopia\Async\Parallel\Adapter\Swoole\Process as SwooleProcess;
 use Utopia\Async\Parallel\Adapter\Swoole\Thread as SwooleThread;
@@ -44,7 +45,7 @@ class Benchmark
         'Swoole Process' => SwooleProcess::class,
         'Amp' => Amp::class,
         'React' => React::class,
-        'ext-parallel' => Parallel::class,
+        'ext-parallel' => ParallelAdapter::class,
     ];
 
     /**
@@ -82,6 +83,10 @@ class Benchmark
 
     public function run(): void
     {
+        // Increase timeout for heavy workloads (scales with load and CPU count)
+        $timeout = max(60, (int) ($this->load * 2 + $this->cpuCount * 5));
+        Parallel::setMaxTaskTimeoutSeconds($timeout);
+
         if (!$this->jsonOutput) {
             $this->printHeader();
         }
@@ -330,6 +335,7 @@ class Benchmark
         foreach ($stats as $adapterName => &$stat) {
             $stat['speedup'] = $syncAvg / $stat['avg'];
         }
+        unset($stat); // Break reference to avoid PHP foreach reference bug
 
         // Find winner
         $bestTime = PHP_FLOAT_MAX;

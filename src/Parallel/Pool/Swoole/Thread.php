@@ -180,7 +180,6 @@ class Thread
             $index = 0;
             foreach ($tasks as $task) {
                 $serializedTask = \Opis\Closure\serialize($task);
-                // Push as ArrayList: [index, batchId, serializedClosure]
                 $taskEntry = new \Swoole\Thread\ArrayList();
                 $taskEntry[] = $index;
                 $taskEntry[] = $this->batchId;
@@ -253,8 +252,9 @@ class Thread
      */
     private function cleanupBatchResults(int $taskCount): void
     {
+        $keyPrefix = "{$this->batchId}_result_";
         for ($i = 0; $i < $taskCount; $i++) {
-            $key = "{$this->batchId}_result_{$i}";
+            $key = $keyPrefix . $i;
             unset($this->resultMap[$key]);
         }
     }
@@ -270,9 +270,11 @@ class Thread
      */
     private function collectResults(array $taskIndexMap, array &$results, array &$pendingIndices): void
     {
+        $keyPrefix = "{$this->batchId}_result_";
+
         // Only iterate pending indices - O(n) instead of O(n²)
         foreach ($pendingIndices as $iterIndex => $_) {
-            $key = "{$this->batchId}_result_{$iterIndex}";
+            $key = $keyPrefix . $iterIndex;
             if (!isset($this->resultMap[$key])) {
                 continue; // Result not ready yet
             }

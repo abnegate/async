@@ -87,7 +87,6 @@ COPY --from=parallel /usr/local/lib/php/extensions/no-debug-zts-20240924/paralle
 COPY --from=parallel /usr/local/etc/php/conf.d/parallel.ini /usr/local/etc/php/conf.d/parallel.ini
 COPY --from=ev /usr/local/lib/php/extensions/no-debug-zts-20240924/ev.so /usr/local/lib/php/extensions/no-debug-zts-20240924/
 COPY --from=ev /usr/local/etc/php/conf.d/ev.ini /usr/local/etc/php/conf.d/ev.ini
-
 COPY . /usr/src/code
 
 CMD [ "tail", "-f", "/dev/null" ]

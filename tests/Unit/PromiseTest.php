@@ -703,4 +703,234 @@ class PromiseTest extends TestCase
         /** @var array{level1: array{level2: array{level3: array{level4: array{value: string}}}}} $result */
         $this->assertEquals('found', $result['level1']['level2']['level3']['level4']['value']);
     }
+
+    /**
+     * A+ 2.3.1: If promise and x refer to the same object, reject with TypeError
+     *
+     * Note: This is tested by directly invoking the resolve callback with the promise instance.
+     * In real usage, this would happen when a then() callback returns the promise it's chained from.
+     */
+    public function testSelfReferenceRejectsWithTypeError(): void
+    {
+        Promise::setAdapter(Sync::class);
+
+        // Create an unresolved promise and capture the resolve function
+        $resolveFunc = null;
+        $promise = new Sync(function (callable $resolve, callable $reject) use (&$resolveFunc) {
+            $resolveFunc = $resolve;
+        });
+
+        // Now resolve with itself - this should reject with TypeError
+        $resolveFunc($promise);
+
+        $this->expectException(\TypeError::class);
+        $this->expectExceptionMessage('A promise cannot be resolved with itself');
+        $promise->await();
+    }
+
+    /**
+     * A+ 2.3.2: If x is a promise, adopt its state (fulfilled)
+     */
+    public function testResolveWithFulfilledPromise(): void
+    {
+        Promise::setAdapter(Sync::class);
+
+        $innerPromise = Promise::resolve('inner value');
+        $outerPromise = Promise::resolve($innerPromise);
+
+        $this->assertEquals('inner value', $outerPromise->await());
+    }
+
+    /**
+     * A+ 2.3.2: If x is a promise, adopt its state (rejected)
+     */
+    public function testResolveWithRejectedPromise(): void
+    {
+        Promise::setAdapter(Sync::class);
+
+        $innerPromise = Promise::reject(new \Exception('inner error'));
+        $outerPromise = Promise::resolve($innerPromise);
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('inner error');
+        $outerPromise->await();
+    }
+
+    /**
+     * A+ 2.3.3: If x is a thenable, call its then method
+     */
+    public function testResolveWithThenable(): void
+    {
+        Promise::setAdapter(Sync::class);
+
+        // Create a custom thenable object
+        $thenable = new class {
+            public function then(callable $onFulfilled, callable $onRejected): void
+            {
+                $onFulfilled('thenable value');
+            }
+        };
+
+        $promise = Promise::resolve($thenable);
+
+        $this->assertEquals('thenable value', $promise->await());
+    }
+
+    /**
+     * A+ 2.3.3: If thenable's then method rejects
+     */
+    public function testResolveWithThenableThatRejects(): void
+    {
+        Promise::setAdapter(Sync::class);
+
+        $thenable = new class {
+            public function then(callable $onFulfilled, callable $onRejected): void
+            {
+                $onRejected(new \Exception('thenable error'));
+            }
+        };
+
+        $promise = Promise::resolve($thenable);
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('thenable error');
+        $promise->await();
+    }
+
+    /**
+     * A+ 2.3.3.3.3: If both resolvePromise and rejectPromise are called, first call wins
+     */
+    public function testThenableFirstCallWins(): void
+    {
+        Promise::setAdapter(Sync::class);
+
+        $thenable = new class {
+            public function then(callable $onFulfilled, callable $onRejected): void
+            {
+                $onFulfilled('first');
+                $onFulfilled('second'); // Should be ignored
+                $onRejected(new \Exception('third')); // Should be ignored
+            }
+        };
+
+        $promise = Promise::resolve($thenable);
+
+        $this->assertEquals('first', $promise->await());
+    }
+
+    /**
+     * A+ 2.3.3.3.4: If thenable's then throws, reject (unless already resolved)
+     */
+    public function testThenableThrowsException(): void
+    {
+        Promise::setAdapter(Sync::class);
+
+        $thenable = new class {
+            public function then(callable $onFulfilled, callable $onRejected): void
+            {
+                throw new \RuntimeException('thenable threw');
+            }
+        };
+
+        $promise = Promise::resolve($thenable);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('thenable threw');
+        $promise->await();
+    }
+
+    /**
+     * A+ 2.3.3.3.4.1: If thenable throws after resolve, exception is ignored
+     */
+    public function testThenableThrowsAfterResolve(): void
+    {
+        Promise::setAdapter(Sync::class);
+
+        $thenable = new class {
+            public function then(callable $onFulfilled, callable $onRejected): void
+            {
+                $onFulfilled('resolved first');
+                throw new \RuntimeException('thrown after'); // Should be ignored
+            }
+        };
+
+        $promise = Promise::resolve($thenable);
+
+        $this->assertEquals('resolved first', $promise->await());
+    }
+
+    /**
+     * A+ 2.2.7.3: If onFulfilled is not a function, promise2 must be fulfilled with same value
+     */
+    public function testThenWithNullOnFulfilledPropagatesValue(): void
+    {
+        Promise::setAdapter(Sync::class);
+
+        $promise = Promise::resolve('original')
+            ->then(null, fn ($e) => 'error handler')
+            ->then(fn ($v) => $v . ' passed');
+
+        $this->assertEquals('original passed', $promise->await());
+    }
+
+    /**
+     * A+ 2.2.7.4: If onRejected is not a function, promise2 must be rejected with same reason
+     */
+    public function testThenWithNullOnRejectedPropagatesReason(): void
+    {
+        Promise::setAdapter(Sync::class);
+
+        $promise = Promise::reject(new \Exception('original error'))
+            ->then(fn ($v) => 'success handler', null)
+            ->catch(fn ($e) => 'caught: ' . $e->getMessage());
+
+        $this->assertEquals('caught: original error', $promise->await());
+    }
+
+    /**
+     * A+ 2.2.7.1: If onFulfilled returns a promise, promise2 adopts its state
+     */
+    public function testThenReturningPromise(): void
+    {
+        Promise::setAdapter(Sync::class);
+
+        $promise = Promise::resolve('start')
+            ->then(fn ($v) => Promise::resolve('chained promise'));
+
+        $this->assertEquals('chained promise', $promise->await());
+    }
+
+    /**
+     * A+ 2.3.3.1: Recursive thenable resolution
+     */
+    public function testRecursiveThenableResolution(): void
+    {
+        Promise::setAdapter(Sync::class);
+
+        // Thenable that resolves to another thenable
+        $innerThenable = new class {
+            public function then(callable $onFulfilled, callable $onRejected): void
+            {
+                $onFulfilled('deeply nested value');
+            }
+        };
+
+        $outerThenable = new class($innerThenable) {
+            private object $inner;
+
+            public function __construct(object $inner)
+            {
+                $this->inner = $inner;
+            }
+
+            public function then(callable $onFulfilled, callable $onRejected): void
+            {
+                $onFulfilled($this->inner);
+            }
+        };
+
+        $promise = Promise::resolve($outerThenable);
+
+        $this->assertEquals('deeply nested value', $promise->await());
+    }
 }
