@@ -80,6 +80,16 @@ abstract class Adapter
     abstract public static function isSupported(): bool;
 
     /**
+     * Shutdown any persistent resources (e.g., worker pools).
+     *
+     * @return void
+     */
+    public static function shutdown(): void
+    {
+        // Default: no-op. Adapters with persistent resources should override.
+    }
+
+    /**
      * Cached CPU count to avoid repeated system calls.
      *
      * @var int|null

@@ -56,12 +56,29 @@ class Amp extends Adapter
     /**
      * Sleep using Amp's event loop delay.
      *
+     * Runs a single iteration of the event loop using a fiber-based approach.
+     * Creates a fiber to properly drive the Revolt event loop and process
+     * pending callbacks.
+     *
      * @return void
      */
     protected function sleep(): void
     {
-        // Use Revolt event loop tick instead of blocking sleep
-        \Revolt\EventLoop::run();
+        // Use a fiber to properly drive the event loop for one "tick"
+        $fiber = new \Fiber(function () {
+            $suspension = \Revolt\EventLoop::getSuspension();
+            \Revolt\EventLoop::defer(function () use ($suspension) {
+                $suspension->resume(null);
+            });
+            $suspension->suspend();
+        });
+
+        $fiber->start();
+
+        // If the fiber is suspended (waiting for defer), run the event loop
+        while (!$fiber->isTerminated()) {
+            \Revolt\EventLoop::run();
+        }
     }
 
     /**
@@ -135,6 +152,11 @@ class Amp extends Adapter
         static::checkSupport();
 
         return self::create(function (callable $resolve, callable $reject) use ($promises) {
+            if (empty($promises)) {
+                $reject(new Promise('Cannot race with an empty array of promises'));
+                return;
+            }
+
             $settled = false;
 
             foreach ($promises as $promise) {

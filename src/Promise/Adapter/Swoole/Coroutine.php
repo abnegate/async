@@ -158,6 +158,11 @@ class Coroutine extends Adapter
     public static function race(array $promises): static
     {
         return self::create(function (callable $resolve, callable $reject) use ($promises) {
+            if (empty($promises)) {
+                $reject(new PromiseException('Cannot race with an empty array of promises'));
+                return;
+            }
+
             $settled = false;
             $channel = new Channel(1);
 

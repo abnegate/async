@@ -192,14 +192,26 @@ class Parallel
     /**
      * Create an explicit worker pool with specified worker count.
      *
+     * Only supported by Swoole Process and Thread adapters. Other adapters
+     * will throw an exception.
+     *
      * @param int $workers Number of workers in the pool
      * @return ThreadPool|ProcessPool The created pool
-     * @throws AdapterException
+     * @throws AdapterException If the current adapter doesn't support explicit pools
      */
     public static function createPool(int $workers): ThreadPool|ProcessPool
     {
+        $adapter = static::getAdapter();
+
+        if (!\method_exists($adapter, 'createPool')) {
+            throw new AdapterException(
+                "The current adapter ({$adapter}) does not support createPool(). " .
+                "Only Swoole Process and Thread adapters support explicit pool creation."
+            );
+        }
+
         /** @var ThreadPool|ProcessPool $pool */
-        $pool = static::getAdapter()::createPool($workers);
+        $pool = $adapter::createPool($workers);
         return $pool;
     }
 

@@ -332,13 +332,40 @@ class Process
             return;
         }
 
+        // Send STOP signal to all workers and collect their PIDs
+        $pidsToWait = [];
         foreach ($this->workers as $worker) {
+            $pidsToWait[$worker->pid] = true;
             $worker->write('STOP');
         }
 
-        // Wait for each worker process to exit
-        foreach ($this->workers as $_) {
-            SwooleProcess::wait(true);
+        $maxWaitTime = 5; // Maximum 5 seconds to wait for workers
+        $startTime = \time();
+
+        while (!empty($pidsToWait)) {
+            $waitResult = SwooleProcess::wait(false); // Non-blocking
+
+            if ($waitResult !== false && \is_array($waitResult) && isset($waitResult['pid'])) {
+                $pid = $waitResult['pid'];
+                if (\is_int($pid) && isset($pidsToWait[$pid])) {
+                    unset($pidsToWait[$pid]);
+                }
+            } else {
+                if (\time() - $startTime > $maxWaitTime) {
+                    foreach ($this->workers as $worker) {
+                        if (isset($pidsToWait[$worker->pid])) {
+                            SwooleProcess::kill($worker->pid, SIGKILL);
+                        }
+                    }
+                    break;
+                }
+
+                if (SwooleCoroutine::getCid() > 0) {
+                    SwooleCoroutine::sleep(0.001); // 1ms
+                } else {
+                    \usleep(1000);
+                }
+            }
         }
 
         $this->workers = [];

@@ -3,6 +3,7 @@
 namespace Utopia\Async\Promise;
 
 use Utopia\Async\Exception\Timeout;
+use Utopia\Async\Promise\Configuration;
 
 /**
  * Abstract Promise Adapter.
@@ -285,6 +286,32 @@ abstract class Adapter
     }
 
     /**
+     * Wait for promise with timeout protection.
+     *
+     * Used for external thenable/promise resolution to prevent infinite loops
+     * if the external promise never settles.
+     *
+     * @return void
+     * @throws \RuntimeException If timeout is exceeded
+     */
+    private function waitWithTimeout(): void
+    {
+        $startTime = \time();
+        $timeout = Configuration::getThenableTimeoutSeconds();
+
+        while ($this->isPending()) {
+            if (\time() - $startTime > $timeout) {
+                $this->result = new \RuntimeException(
+                    "External thenable/promise failed to settle within {$timeout} seconds"
+                );
+                $this->state = self::STATE_REJECTED;
+                return;
+            }
+            $this->sleep();
+        }
+    }
+
+    /**
      * Wrap the promise with a timeout that rejects if not settled in time.
      *
      * @param int $milliseconds
@@ -422,9 +449,7 @@ abstract class Adapter
             }
         );
 
-        while ($this->isPending()) {
-            $this->sleep();
-        }
+        $this->waitWithTimeout();
     }
 
     /**
@@ -463,9 +488,7 @@ abstract class Adapter
             }
         }
 
-        while ($this->isPending()) {
-            $this->sleep();
-        }
+        $this->waitWithTimeout();
     }
 
     /**

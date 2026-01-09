@@ -51,15 +51,21 @@ if ($serializedTask === false || $serializedArgs === false) {
 
 try {
     $task = \Opis\Closure\unserialize($serializedTask);
-    /** @var array<mixed> $args */
     $args = @unserialize($serializedArgs);
 
     if (!is_callable($task)) {
         exit(1);
     }
 
-    /** @var array<mixed> $args - validated via unserialize */
+    if ($args === false && $serializedArgs !== serialize(false)) {
+        exit(1);
+    }
 
+    if (!is_array($args)) {
+        exit(1);
+    }
+
+    /** @var array<mixed> $args */
     $result = empty($args) ? $task() : $task(...$args);
 
     $output = serialize(['success' => true, 'result' => $result]);

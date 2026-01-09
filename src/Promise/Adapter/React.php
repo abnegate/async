@@ -61,12 +61,19 @@ class React extends Adapter
     protected function sleep(): void
     {
         $loop = \React\EventLoop\Loop::get();
+        $timer = null;
 
-        $timer = $loop->addTimer(Configuration::getSleepDurationUs() / 1000000, function () use ($loop) {
-            $loop->stop();
-        });
+        try {
+            $timer = $loop->addTimer(Configuration::getSleepDurationUs() / 1000000, function () use ($loop) {
+                $loop->stop();
+            });
 
-        $loop->run();
+            $loop->run();
+        } finally {
+            if ($timer !== null) {
+                $loop->cancelTimer($timer);
+            }
+        }
     }
 
     /**
@@ -141,6 +148,11 @@ class React extends Adapter
         static::checkSupport();
 
         return self::create(function (callable $resolve, callable $reject) use ($promises) {
+            if (empty($promises)) {
+                $reject(new Promise('Cannot race with an empty array of promises'));
+                return;
+            }
+
             $settled = false;
 
             foreach ($promises as $promise) {

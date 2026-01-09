@@ -109,6 +109,11 @@ class Sync extends Adapter
     public static function race(array $promises): static
     {
         return self::create(function (callable $resolve, callable $reject) use ($promises) {
+            if (empty($promises)) {
+                $reject(new Promise('Cannot race with an empty array of promises'));
+                return;
+            }
+
             $settled = false;
 
             foreach ($promises as $promise) {

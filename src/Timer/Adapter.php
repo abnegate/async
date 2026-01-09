@@ -203,10 +203,32 @@ abstract class Adapter
     /**
      * Generate a new unique timer ID.
      *
+     * Handles integer overflow by wrapping around and skipping active timer IDs.
+     *
      * @return int The new timer ID
      */
     protected function generateTimerId(): int
     {
-        return $this->nextTimerId++;
+        $attempts = 0;
+        $maxAttempts = 1000;
+
+        do {
+            $timerId = $this->nextTimerId++;
+
+            // Handle integer overflow by wrapping to 1 (keep positive IDs)
+            if ($this->nextTimerId > PHP_INT_MAX - 1) {
+                $this->nextTimerId = 1;
+            }
+
+            // If this ID isn't in use, we're done
+            if (!isset($this->timers[$timerId])) {
+                return $timerId;
+            }
+
+            $attempts++;
+        } while ($attempts < $maxAttempts);
+
+        // This should never happen unless there are 1000+ consecutive active timers
+        throw new \RuntimeException('Unable to generate unique timer ID: too many active timers');
     }
 }

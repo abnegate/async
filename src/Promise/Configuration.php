@@ -17,6 +17,7 @@ final class Configuration
     private const int DEFAULT_SLEEP_DURATION_US = 100; // 100μs
     private const int DEFAULT_MAX_SLEEP_DURATION_US = 10000; // 10ms
     private const float DEFAULT_COROUTINE_SLEEP_DURATION_S = 0.001; // 1ms
+    private const int DEFAULT_THENABLE_TIMEOUT_SECONDS = 30; // 30 seconds
 
     /**
      * Configurable static properties
@@ -24,6 +25,7 @@ final class Configuration
     private static ?int $sleepDurationUs = null;
     private static ?int $maxSleepDurationUs = null;
     private static ?float $coroutineSleepDurationS = null;
+    private static ?int $thenableTimeoutSeconds = null;
 
     /**
      * Private constructor to prevent instantiation.
@@ -84,6 +86,23 @@ final class Configuration
     }
 
     /**
+     * Get thenable resolution timeout in seconds.
+     * Maximum time to wait for external thenables to resolve.
+     */
+    public static function getThenableTimeoutSeconds(): int
+    {
+        return self::$thenableTimeoutSeconds ?? self::DEFAULT_THENABLE_TIMEOUT_SECONDS;
+    }
+
+    /**
+     * Set thenable resolution timeout in seconds.
+     */
+    public static function setThenableTimeoutSeconds(int $seconds): void
+    {
+        self::$thenableTimeoutSeconds = $seconds;
+    }
+
+    /**
      * Reset all configuration to default values.
      */
     public static function reset(): void
@@ -91,5 +110,6 @@ final class Configuration
         self::$sleepDurationUs = null;
         self::$maxSleepDurationUs = null;
         self::$coroutineSleepDurationS = null;
+        self::$thenableTimeoutSeconds = null;
     }
 }
