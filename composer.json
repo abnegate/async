@@ -19,7 +19,7 @@
     "amphp/process": "^2.0",
     "laravel/pint": "1.*",
     "phpstan/phpstan": "2.*",
-    "phpunit/phpunit": "11.5.45",
+    "phpunit/phpunit": "12.5.22",
     "react/child-process": "0.*",
     "react/event-loop": "1.*",
     "swoole/ide-helper": "*"
